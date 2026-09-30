@@ -22,12 +22,29 @@ const SUPABASE_STUB = `
   grant usage on schema public to anon, authenticated, service_role;
   alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
   alter default privileges in schema public grant all on functions to anon, authenticated, service_role;
+  -- pg_cron / pg_net / Vault の代わり（呼び出し内容を記録する）
+  create schema cron;
+  create table cron.jobs (name text primary key, schedule text, command text);
+  create function cron.schedule(job_name text, schedule text, command text) returns bigint language sql as $$
+    insert into cron.jobs values (job_name, schedule, command)
+      on conflict (name) do update set schedule = excluded.schedule, command = excluded.command;
+    select 1::bigint
+  $$;
+  create schema net;
+  create table net.requests (url text, headers jsonb, body jsonb);
+  create function net.http_post(url text, headers jsonb, body jsonb) returns bigint language sql as $$
+    insert into net.requests values (url, headers, body); select 1::bigint
+  $$;
+  create schema vault;
+  create table vault.decrypted_secrets (name text primary key, decrypted_secret text);
 `;
 
 const db = new PGlite();
 await db.exec(SUPABASE_STUB);
 for (const f of readdirSync(MIGRATIONS).filter((f) => f.endsWith(".sql")).sort()) {
-  await db.exec(readFileSync(join(MIGRATIONS, f), "utf8"));
+  // 拡張機能はスタブ済みのため create extension は読み飛ばす
+  const sql = readFileSync(join(MIGRATIONS, f), "utf8").replace(/^create extension .*$/gm, "");
+  await db.exec(sql);
 }
 
 const ids = {
@@ -395,6 +412,21 @@ await test("通知: 本人のみ閲覧・すべて既読・既読でも残る・
   assert.equal((await as("B", "select * from notifications")).length, 0);
   const [{ purge_expired_notifications: purged }] = await asService("select purge_expired_notifications()");
   assert.equal(purged, 1);
+});
+
+await test("定期処理: 毎分ジョブ登録、Vault未設定なら何もしない、設定後はシークレット付きで呼ぶ", async () => {
+  const [job] = await asSuper("select * from cron.jobs");
+  assert.equal(job.schedule, "* * * * *");
+  await asSuper("select invoke_cron_tick()");
+  assert.equal((await asSuper("select * from net.requests")).length, 0);
+  await asSuper(
+    "insert into vault.decrypted_secrets values ('condofit_app_origin', 'https://fit.example/'), ('condofit_cron_secret', 's3cret')",
+  );
+  await asSuper("select invoke_cron_tick()");
+  const [req] = await asSuper("select * from net.requests");
+  assert.equal(req.url, "https://fit.example/api/cron/tick");
+  assert.equal(req.headers.Authorization, "Bearer s3cret");
+  await rejects(() => as("A", "select invoke_cron_tick()"), /permission denied/);
 });
 
 console.log(`\n${passed} passed${process.exitCode ? ", some FAILED" : ""}`);

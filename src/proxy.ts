@@ -1,7 +1,8 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-const PUBLIC_PATHS = ["/login", "/join"];
+// /api/cron はルート側で共有シークレットを検証する
+const PUBLIC_PATHS = ["/login", "/join", "/api/cron"];
 
 // セッションCookieの更新と、未ログイン時のリダイレクト（楽観的チェック）。
 // 実際の権限はDBのRLSとサーバー側の確認で強制する。

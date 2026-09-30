@@ -14,6 +14,14 @@
    ```
 2. `.env.example` を `.env.local` にコピーして値を入れる
    - `PIN_PEPPER` は長いランダム文字列（例: `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`）。**運用開始後に変更すると全員ログインできなくなる**
+   - `GYM_LAT` / `GYM_LNG` に LIFEfit 新羽店の座標。未設定の間はチェックインできない
+   - `NEXT_PUBLIC_VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` は `npx web-push generate-vapid-keys` で生成
+   - `CRON_SECRET` はランダム文字列
+   - Supabase の SQL エディタで、定期処理（15分確認通知・通知の期限削除）の呼び先を Vault に登録する
+     ```sql
+     select vault.create_secret('https://<アプリのドメイン>', 'condofit_app_origin');
+     select vault.create_secret('<CRON_SECRET と同じ値>', 'condofit_cron_secret');
+     ```
 3. 最初の管理者を作成する
    ```sh
    npm run admin:create -- <表示名> <4桁PIN>

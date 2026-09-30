@@ -4,6 +4,8 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "CondoFit",
   description: "今度Fit行こう！",
+  appleWebApp: { capable: true, title: "CondoFit", statusBarStyle: "default" },
+  icons: { icon: "/icons/icon-192.png", apple: "/icons/apple-touch-icon.png" },
 };
 
 export const viewport: Viewport = {
