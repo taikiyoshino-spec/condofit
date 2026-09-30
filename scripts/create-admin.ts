@@ -1,5 +1,6 @@
 // 初回セットアップ: グループ（未作成なら）と最初の管理者を作成する。
 // 使い方: npm run admin:create -- <表示名> <4桁PIN> [グループ名]
+//        npm run admin:create -- --member <表示名> <4桁PIN>   （一般メンバーを作成。通常は招待URLから参加してもらう）
 import { createClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
 import {
@@ -20,9 +21,13 @@ function env(name: string): string {
   return value;
 }
 
-const [rawName, pin, groupName = "CondoFit"] = process.argv.slice(2);
+const args = process.argv.slice(2);
+const asMember = args[0] === "--member";
+if (asMember) args.shift();
+const role = asMember ? "member" : "admin";
+const [rawName, pin, groupName = "CondoFit"] = args;
 if (!rawName || !pin) {
-  console.error("使い方: npm run admin:create -- <表示名> <4桁PIN> [グループ名]");
+  console.error("使い方: npm run admin:create -- [--member] <表示名> <4桁PIN> [グループ名]");
   process.exit(1);
 }
 const displayName = normalizeDisplayName(rawName);
@@ -47,6 +52,7 @@ async function main() {
   if (groups.length > 1) throw new Error("グループが複数あります。このスクリプトは単一グループ前提です");
 
   let groupId = groups[0]?.id as string | undefined;
+  if (!groupId && asMember) throw new Error("グループがありません。先に管理者を作成してください");
   if (!groupId) {
     const { data, error } = await supabase.from("groups").insert({ name: groupName }).select("id").single();
     if (error) throw error;
@@ -66,7 +72,7 @@ async function main() {
   const steps = [
     () => supabase.from("users").insert({ id: userId, display_name: displayName }),
     () => supabase.from("user_secrets").insert({ user_id: userId, pin_hash: hashPin(pin) }),
-    () => supabase.from("group_members").insert({ group_id: groupId, user_id: userId, role: "admin" }),
+    () => supabase.from("group_members").insert({ group_id: groupId, user_id: userId, role }),
   ];
   for (const step of steps) {
     const { error } = await step();
@@ -78,7 +84,7 @@ async function main() {
       throw error;
     }
   }
-  console.log(`管理者「${displayName}」を作成しました。表示名とPINでログインできます`);
+  console.log(`${asMember ? "メンバー" : "管理者"}「${displayName}」を作成しました。表示名とPINでログインできます`);
 }
 
 main().catch((e) => {
