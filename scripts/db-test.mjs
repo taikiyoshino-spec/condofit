@@ -414,6 +414,14 @@ await test("通知: 本人のみ閲覧・すべて既読・既読でも残る・
   assert.equal(purged, 1);
 });
 
+await test("アプリのクエリが指定している外部キー名が存在する", async () => {
+  const rows = await asSuper(
+    "select conname from pg_constraint where conname = any($1)",
+    [["schedules_creator_user_id_fkey"]],
+  );
+  assert.equal(rows.length, 1);
+});
+
 await test("定期処理: 毎分ジョブ登録、Vault未設定なら何もしない、設定後はシークレット付きで呼ぶ", async () => {
   const [job] = await asSuper("select * from cron.jobs");
   assert.equal(job.schedule, "* * * * *");
