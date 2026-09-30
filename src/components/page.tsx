@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-export function PageHeader({ title, back }: { title: string; back?: string }) {
+export function PageHeader({ title, back, action }: { title: string; back?: string; action?: ReactNode }) {
   return (
     <header className="flex items-center gap-2 px-4 pb-2 pt-4">
       {back && (
@@ -12,6 +12,7 @@ export function PageHeader({ title, back }: { title: string; back?: string }) {
         </Link>
       )}
       <h1 className="text-xl font-bold">{title}</h1>
+      {action && <div className="ml-auto">{action}</div>}
     </header>
   );
 }
