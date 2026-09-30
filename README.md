@@ -2,6 +2,7 @@
 
 同じマンションの仲間で使う、ゆるいFit（LIFEfit新羽店）モチベーション共有アプリ。
 
+- 本番: https://condofit-one.vercel.app（稼働確認: `/api/health`）
 - 仕様: [`CONDOFIT_SPEC_LATEST.md`](CONDOFIT_SPEC_LATEST.md)
 - 実装時の決定事項: [`docs/DECISIONS.md`](docs/DECISIONS.md)
 
