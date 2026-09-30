@@ -1,6 +1,6 @@
 import { requireAdmin } from "@/lib/auth/session";
 import { hasActiveInvite, listMembers } from "@/lib/auth/service";
-import { PageHeader, Section } from "@/components/page";
+import { MenuList, PageHeader, Section } from "@/components/page";
 import { InviteForm, MemberActions } from "./forms";
 
 export default async function AdminPage() {
@@ -11,6 +11,7 @@ export default async function AdminPage() {
   return (
     <>
       <PageHeader title="管理者メニュー" back="/mypage/settings" />
+      <MenuList items={[{ href: "/admin/exercises", label: "種目マスタ管理" }]} />
       <Section title="招待URL">
         <p className="mb-3 text-sm text-muted">
           {invite

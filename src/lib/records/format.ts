@@ -54,3 +54,30 @@ export function jstDateOf(iso: string): string {
 export function jstTimeOf(iso: string): string {
   return toJstInputValue(iso).slice(11, 16);
 }
+
+/**
+ * 1セッション内の代表値（種目タブの月間代表値と同じ規則）
+ *  重量系: 最大重量 + その重量での回数（同重量なら多い方）。重量なしなら最大回数
+ *  有酸素: 合計時間 + 合計距離（存在する値のみ）
+ */
+export function sessionRepresentative(type: ExerciseType, entries: Entry[]): Entry | null {
+  if (type === "weight") {
+    const rows = entries.filter((e) => e.weight_kg !== null || e.reps !== null);
+    if (rows.length === 0) return null;
+    const best = rows.reduce((a, b) => {
+      const aw = a.weight_kg ?? -1;
+      const bw = b.weight_kg ?? -1;
+      if (bw !== aw) return bw > aw ? b : a;
+      return (b.reps ?? -1) > (a.reps ?? -1) ? b : a;
+    });
+    return { weight_kg: best.weight_kg, reps: best.reps, duration_min: null, distance_km: null };
+  }
+  const sum = (key: "duration_min" | "distance_km") => {
+    const values = entries.map((e) => e[key]).filter((v): v is number => v !== null);
+    return values.length ? Math.round(values.reduce((a, b) => a + b, 0) * 100) / 100 : null;
+  };
+  const duration = sum("duration_min");
+  const distance = sum("distance_km");
+  if (duration === null && distance === null) return null;
+  return { weight_kg: null, reps: null, duration_min: duration, distance_km: distance };
+}

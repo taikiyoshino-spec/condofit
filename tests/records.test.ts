@@ -35,3 +35,21 @@ test("JSTの日時入力との相互変換（日付またぎ）", () => {
   assert.equal(fromJstInputValue("2026-09-30"), null);
   assert.equal(jstDateOf("2026-09-29T15:30:00.000Z"), "2026-09-30");
 });
+
+import { sessionRepresentative } from "../src/lib/records/format.ts";
+
+test("代表値: 重量系は最大重量 + その重量での回数", () => {
+  const rows = [e(40, 10), e(60, 5), e(60, 6), e(50, 8)];
+  assert.deepEqual(sessionRepresentative("weight", rows), e(60, 6));
+  assert.deepEqual(sessionRepresentative("weight", [e(null, 12), e(null, 15)]), e(null, 15));
+  assert.deepEqual(sessionRepresentative("weight", [e(20, null), e(null, 30)]), e(20, null));
+  assert.equal(sessionRepresentative("weight", [e(null, null)]), null);
+});
+
+test("代表値: 有酸素は合計時間 + 合計距離（片方だけなら存在する方）", () => {
+  const c = (d: number | null, k: number | null) => e(null, null, d, k);
+  assert.deepEqual(sessionRepresentative("cardio", [c(20, 1.5), c(10, 0.8)]), c(30, 2.3));
+  assert.deepEqual(sessionRepresentative("cardio", [c(20, null), c(null, 2)]), c(20, 2));
+  assert.deepEqual(sessionRepresentative("cardio", [c(15, null)]), c(15, null));
+  assert.equal(sessionRepresentative("cardio", [c(null, null)]), null);
+});
