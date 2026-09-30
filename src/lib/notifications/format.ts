@@ -4,6 +4,7 @@ import { INTENTION_LABEL, TIME_SLOT_LABEL, type Intention, type TimeSlot } from 
 export type NotificationRow = {
   id: string;
   type: string;
+  actorId?: string | null;
   actorName: string | null;
   payload: Record<string, unknown>;
   createdAt: string;

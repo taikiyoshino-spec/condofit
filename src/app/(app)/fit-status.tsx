@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useSearchParams } from "next/navigation";
 import { checkInAction, checkOutAction, verifyLocationAction } from "@/app/actions/checkin";
+import { Avatar } from "@/components/avatar";
 import { BottomSheet } from "@/components/bottom-sheet";
 import { showToast } from "@/components/toaster";
 import { createClient } from "@/lib/supabase/client";
@@ -189,10 +190,11 @@ export function FitStatus({ initial, myId }: { initial: ActiveCheckIn[]; myId: s
             {active.map((c) => {
               const stale = minutesSince(c.lastVerifiedAt, now) >= STALE_MINUTES;
               return (
-                <li key={c.userId} className="flex items-center justify-between py-2.5">
-                  <span className="font-medium">
-                    {c.displayName}
-                    {c.userId === myId && <span className="ml-1 text-xs text-muted">（自分）</span>}
+                <li key={c.userId} className="flex items-center justify-between gap-2 py-2.5">
+                  <span className="flex min-w-0 items-center gap-2 font-medium">
+                    <Avatar userId={c.userId} name={c.displayName} size={32} />
+                    <span className="truncate">{c.displayName}</span>
+                    {c.userId === myId && <span className="shrink-0 text-xs text-muted">（自分）</span>}
                   </span>
                   <span className={`text-sm ${stale ? "text-warn" : "text-muted"}`}>
                     {stale && "⚠ "}

@@ -35,6 +35,8 @@ const SUPABASE_STUB = `
   create function net.http_post(url text, headers jsonb, body jsonb) returns bigint language sql as $$
     insert into net.requests values (url, headers, body); select 1::bigint
   $$;
+  create schema storage;
+  create table storage.buckets (id text primary key, name text, public boolean, file_size_limit bigint, allowed_mime_types text[]);
   create schema vault;
   create table vault.decrypted_secrets (name text primary key, decrypted_secret text);
 `;
@@ -412,6 +414,14 @@ await test("通知: 本人のみ閲覧・すべて既読・既読でも残る・
   assert.equal((await as("B", "select * from notifications")).length, 0);
   const [{ purge_expired_notifications: purged }] = await asService("select purge_expired_notifications()");
   assert.equal(purged, 1);
+});
+
+await test("プロフィール画像: 非公開バケット、保存先は利用者から直接変更できない", async () => {
+  const [bucket] = await asSuper("select public, file_size_limit from storage.buckets where id = 'avatars'");
+  assert.equal(bucket.public, false);
+  await rejects(() => as("A", "update users set avatar_path = 'x' where id = $1", [ids.A]), /permission denied/);
+  const rows = await as("B", "select avatar_path from users where id = $1", [ids.A]);
+  assert.equal(rows.length, 1, "メンバーは他メンバーの画像の有無を参照できる");
 });
 
 await test("アプリのクエリが指定している外部キー名が存在する", async () => {

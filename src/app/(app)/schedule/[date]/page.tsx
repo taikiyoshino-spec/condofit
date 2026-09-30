@@ -8,6 +8,7 @@ import { PageHeader, Section } from "@/components/page";
 import { RealtimeRefresh } from "@/components/realtime-refresh";
 import { TimeSlotIcon } from "@/components/time-slot-icon";
 import { CreateSchedule } from "./create-schedule";
+import { ParticipantList } from "@/components/participants";
 
 export default async function DaySchedulePage({ params }: PageProps<"/schedule/[date]">) {
   const member = await requireMember();
@@ -46,14 +47,18 @@ export default async function DaySchedulePage({ params }: PageProps<"/schedule/[
                     )}
                   </div>
                   <p className="mt-1 text-xs text-muted">作成: {s.creatorName}さん</p>
-                  <p className="mt-2 text-sm">
-                    <span className="font-medium">行く！</span> {going.map((p) => p.displayName).join("、") || "—"}
-                  </p>
-                  {maybe.length > 0 && (
-                    <p className="text-sm">
-                      <span className="font-medium">行けたら行く</span> {maybe.map((p) => p.displayName).join("、")}
-                    </p>
-                  )}
+                  <div className="mt-2 space-y-1.5 text-sm">
+                    <div className="flex gap-2">
+                      <span className="shrink-0 font-medium">行く！</span>
+                      <ParticipantList people={going} />
+                    </div>
+                    {maybe.length > 0 && (
+                      <div className="flex gap-2">
+                        <span className="shrink-0 font-medium">行けたら行く</span>
+                        <ParticipantList people={maybe} />
+                      </div>
+                    )}
+                  </div>
                 </Link>
               </li>
             );

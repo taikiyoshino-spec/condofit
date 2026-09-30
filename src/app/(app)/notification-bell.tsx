@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Avatar } from "@/components/avatar";
 import { BottomSheet } from "@/components/bottom-sheet";
 import { createClient } from "@/lib/supabase/client";
 import { formatNotification, type NotificationRow } from "@/lib/notifications/format";
@@ -12,7 +13,7 @@ async function fetchNotifications(): Promise<NotificationRow[]> {
   // RLS により自分宛て・7日以内（期限内）のみ返る
   const { data } = await supabase
     .from("notifications")
-    .select("id, type, payload, created_at, read_at, actor:users!notifications_actor_user_id_fkey(display_name)")
+    .select("id, type, payload, created_at, read_at, actor_user_id, actor:users!notifications_actor_user_id_fkey(display_name)")
     .order("created_at", { ascending: false })
     .limit(100);
   return (data ?? []).map((n) => ({
@@ -21,6 +22,7 @@ async function fetchNotifications(): Promise<NotificationRow[]> {
     payload: (n.payload ?? {}) as Record<string, unknown>,
     createdAt: n.created_at as string,
     readAt: n.read_at as string | null,
+    actorId: (n.actor_user_id as string | null) ?? null,
     actorName: (n.actor as unknown as { display_name: string } | null)?.display_name ?? null,
   }));
 }
@@ -114,8 +116,15 @@ export function NotificationBell({ myId }: { myId: string }) {
                     >
                       <span
                         aria-label={n.readAt ? "既読" : "未読"}
-                        className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${n.readAt ? "bg-transparent" : "bg-accent"}`}
+                        className={`mt-3 h-2 w-2 shrink-0 rounded-full ${n.readAt ? "bg-transparent" : "bg-accent"}`}
                       />
+                      {n.actorId ? (
+                        <Avatar userId={n.actorId} name={n.actorName ?? ""} size={32} />
+                      ) : (
+                        <span aria-hidden className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-warn/20 text-warn">
+                          !
+                        </span>
+                      )}
                       <span className="min-w-0 flex-1">
                         <span className={`block text-sm ${n.readAt ? "text-muted" : ""}`}>{f.text}</span>
                         {f.sub && <span className="block text-sm text-muted">{f.sub}</span>}

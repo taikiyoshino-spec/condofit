@@ -7,6 +7,7 @@ import { PageHeader, Section } from "@/components/page";
 import { RealtimeRefresh } from "@/components/realtime-refresh";
 import { TimeSlotIcon } from "@/components/time-slot-icon";
 import { CreatorControls, IntentionControl } from "./controls";
+import { ParticipantList } from "@/components/participants";
 
 const UUID_RE = /^[0-9a-f-]{36}$/i;
 
@@ -55,11 +56,15 @@ export default async function ScheduleDetailPage({ params }: PageProps<"/schedul
         <dl className="space-y-2 text-sm">
           <div>
             <dt className="font-medium">行く！（{going.length}人）</dt>
-            <dd className="text-muted">{going.map((p) => p.displayName).join("、") || "—"}</dd>
+            <dd className="mt-1">
+              <ParticipantList people={going} size={26} />
+            </dd>
           </div>
           <div>
             <dt className="font-medium">行けたら行く（{maybe.length}人）</dt>
-            <dd className="text-muted">{maybe.map((p) => p.displayName).join("、") || "—"}</dd>
+            <dd className="mt-1">
+              <ParticipantList people={maybe} size={26} />
+            </dd>
           </div>
         </dl>
       </Section>

@@ -15,7 +15,7 @@ export async function getMyMonthStats(): Promise<MonthStats> {
 export async function getRecentActivity(): Promise<ActivityRow[]> {
   const supabase = await createClient();
   const { data } = await supabase.rpc("recent_activity");
-  return ((data ?? []) as { kind: string; display_name: string; occurred_at: string; detail: Record<string, unknown> }[]).map(
-    (r) => ({ kind: r.kind, displayName: r.display_name, occurredAt: r.occurred_at, detail: r.detail ?? {} }),
+  return ((data ?? []) as { kind: string; actor_user_id: string; display_name: string; occurred_at: string; detail: Record<string, unknown> }[]).map(
+    (r) => ({ kind: r.kind, actorUserId: r.actor_user_id, displayName: r.display_name, occurredAt: r.occurred_at, detail: r.detail ?? {} }),
   );
 }

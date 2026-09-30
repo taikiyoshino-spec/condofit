@@ -7,6 +7,7 @@ import { formatActivity } from "@/lib/home/activity";
 import { addDays, todayJst } from "@/lib/date";
 import { PageHeader, Section } from "@/components/page";
 import { RealtimeRefresh } from "@/components/realtime-refresh";
+import { Avatar } from "@/components/avatar";
 import { FitStatus } from "./fit-status";
 import { NextDays } from "./next-days";
 import { NotificationBell } from "./notification-bell";
@@ -57,8 +58,11 @@ export default async function HomePage() {
         ) : (
           <ul className="space-y-2.5">
             {activity.map((a, i) => (
-              <li key={i} className="flex items-baseline justify-between gap-3 text-sm">
-                <span>{formatActivity(a)}</span>
+              <li key={i} className="flex items-center justify-between gap-3 text-sm">
+                <span className="flex min-w-0 items-center gap-2">
+                  {a.actorUserId && <Avatar userId={a.actorUserId} name={a.displayName} size={26} />}
+                  <span>{formatActivity(a)}</span>
+                </span>
                 <RelativeTime iso={a.occurredAt} className="shrink-0 text-xs text-muted" />
               </li>
             ))}

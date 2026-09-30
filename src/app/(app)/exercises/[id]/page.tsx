@@ -5,6 +5,7 @@ import { formatEntry } from "@/lib/records/format";
 import { PageHeader, Section } from "@/components/page";
 import { RealtimeRefresh } from "@/components/realtime-refresh";
 import { ExerciseHistory } from "@/components/exercise-history";
+import { MemberName } from "@/components/avatar";
 
 const UUID_RE = /^[0-9a-f-]{36}$/i;
 
@@ -32,7 +33,7 @@ export default async function ExerciseDetailPage({ params }: PageProps<"/exercis
           <ul className="divide-y divide-border">
             {members.map((m) => (
               <li key={m.userId} className="flex items-baseline justify-between py-2.5 text-sm">
-                <span className={m.userId === member.id ? "font-medium" : ""}>{m.displayName}</span>
+                <MemberName userId={m.userId} name={m.displayName} size={26} className={m.userId === member.id ? "font-medium" : ""} />
                 <span>{formatEntry(exercise.type, m.value) ?? "やった"}</span>
               </li>
             ))}

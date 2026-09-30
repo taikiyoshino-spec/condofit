@@ -3,9 +3,26 @@
 import { useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { showToast } from "@/components/toaster";
+import { avatarUrl } from "@/lib/avatar";
+import { rememberAccount, toThumbnail } from "@/lib/client/device-accounts";
 
-/** アプリ共通の常駐処理: Service Worker 登録と、アプリを開いている間のチェックイン通知トースト */
-export function AppEffects({ myId }: { myId: string }) {
+type Props = { myId: string; myName: string; myAvatarPath: string | null };
+
+/** アプリ共通の常駐処理: 端末へのアカウント記憶、Service Worker 登録、アプリを開いている間のチェックイン通知トースト */
+export function AppEffects({ myId, myName, myAvatarPath }: Props) {
+  // この端末でログインした人として覚える（ログイン画面で選べるように。サーバーには送らない）
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const url = avatarUrl(myId, myAvatarPath);
+      const thumb = url ? await toThumbnail(url) : null;
+      if (!cancelled) rememberAccount({ userId: myId, displayName: myName, thumb });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [myId, myName, myAvatarPath]);
+
   useEffect(() => {
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("/sw.js", { scope: "/", updateViaCache: "none" }).catch(() => {});

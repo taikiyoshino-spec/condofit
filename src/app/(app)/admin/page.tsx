@@ -2,6 +2,7 @@ import { requireAdmin } from "@/lib/auth/session";
 import { hasActiveInvite, listMembers } from "@/lib/auth/service";
 import { MenuList, PageHeader, Section } from "@/components/page";
 import { InviteForm, MemberActions } from "./forms";
+import { MemberName } from "@/components/avatar";
 
 export default async function AdminPage() {
   const admin = await requireAdmin();
@@ -26,9 +27,9 @@ export default async function AdminPage() {
           {members.map((m) => (
             <li key={m.userId} className="py-3">
               <div className="flex items-center justify-between">
-                <span className="font-medium">
-                  {m.displayName}
-                  {m.userId === admin.id && <span className="ml-1 text-xs text-muted">（自分）</span>}
+                <span className="flex min-w-0 items-center gap-2 font-medium">
+                  <MemberName userId={m.userId} name={m.displayName} size={32} />
+                  {m.userId === admin.id && <span className="shrink-0 text-xs text-muted">（自分）</span>}
                 </span>
                 <span className="text-xs text-muted">{m.role === "admin" ? "管理者" : "メンバー"}</span>
               </div>

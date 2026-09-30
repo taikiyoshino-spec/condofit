@@ -3,6 +3,7 @@ import { TIME_SLOT_LABEL, type TimeSlot } from "../schedule/time-slots.ts";
 
 export type ActivityRow = {
   kind: string;
+  actorUserId?: string;
   displayName: string;
   occurredAt: string;
   detail: Record<string, unknown>;
