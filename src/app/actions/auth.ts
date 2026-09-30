@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireAdmin, requireMember } from "@/lib/auth/session";
 import * as auth from "@/lib/auth/service";
+import { resolveAppOrigin } from "@/lib/origin";
 
 export type FormState = { error?: string; message?: string; inviteUrl?: string } | undefined;
 
@@ -68,10 +69,14 @@ export async function issueInviteAction(): Promise<FormState> {
   const result = await auth.issueInvite(admin);
   if (!result.ok) return { error: result.error };
   const h = await headers();
-  const host = h.get("x-forwarded-host") ?? h.get("host");
-  const proto = h.get("x-forwarded-proto") ?? (host?.startsWith("localhost") ? "http" : "https");
-  const origin = process.env.APP_ORIGIN ?? `${proto}://${host}`;
+  const origin = resolveAppOrigin({
+    appOrigin: process.env.APP_ORIGIN,
+    vercelProductionUrl: process.env.VERCEL_PROJECT_PRODUCTION_URL,
+    host: h.get("x-forwarded-host") ?? h.get("host"),
+    proto: h.get("x-forwarded-proto"),
+  });
   revalidatePath("/admin");
+  if (!origin) return { error: "招待URLのドメインを特定できませんでした" };
   return { inviteUrl: `${origin}/join/${result.data}`, message: "新しい招待URLを発行しました。旧URLは無効です" };
 }
 
