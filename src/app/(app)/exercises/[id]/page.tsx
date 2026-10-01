@@ -6,6 +6,7 @@ import { PageHeader, Section } from "@/components/page";
 import { RealtimeRefresh } from "@/components/realtime-refresh";
 import { ExerciseHistory } from "@/components/exercise-history";
 import { MemberName } from "@/components/avatar";
+import { RankBadge } from "@/components/rank-badge";
 
 const UUID_RE = /^[0-9a-f-]{36}$/i;
 
@@ -15,7 +16,7 @@ export default async function ExerciseDetailPage({ params }: PageProps<"/exercis
   if (!UUID_RE.test(id)) notFound();
   const exercise = await getExercise(id);
   if (!exercise) notFound();
-  const [members, history] = await Promise.all([getMonthRepresentatives(id), getMyExerciseHistory(member.id, exercise)]);
+  const [members, history] = await Promise.all([getMonthRepresentatives(exercise), getMyExerciseHistory(member.id, exercise)]);
 
   return (
     <>
@@ -32,15 +33,16 @@ export default async function ExerciseDetailPage({ params }: PageProps<"/exercis
         ) : (
           <ul className="divide-y divide-border">
             {members.map((m) => (
-              <li key={m.userId} className="flex items-baseline justify-between py-2.5 text-sm">
-                <MemberName userId={m.userId} name={m.displayName} size={26} className={m.userId === member.id ? "font-medium" : ""} />
+              <li key={m.userId} className="flex items-center gap-3 py-2.5 text-sm">
+                <RankBadge rank={m.rank} />
+                <MemberName userId={m.userId} name={m.displayName} size={26} className={`flex-1 ${m.userId === member.id ? "font-medium" : ""}`} />
                 <span>{formatEntry(exercise.type, m.value) ?? "やった"}</span>
               </li>
             ))}
           </ul>
         )}
         <p className="mt-2 text-xs text-muted">
-          {exercise.type === "weight" ? "その月の最大重量と、その重量での回数です。" : "その月で一番長く・遠くやった回の合計時間と距離です。"}
+          {exercise.type === "weight" ? "今月の最大重量と、その重量での回数です。重い順（同じ重さなら回数の多い順）に並べています。" : "今月いちばん長くやった回の合計時間と距離です。時間の長い順（同じなら距離の長い順）に並べています。"}
         </p>
       </Section>
 

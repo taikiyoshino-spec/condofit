@@ -1,13 +1,16 @@
 import { Suspense } from "react";
+import Link from "next/link";
 import { requireMember } from "@/lib/auth/session";
 import { listActiveCheckIns } from "@/lib/checkin/service";
 import { listSchedules } from "@/lib/schedule/queries";
 import { getMyMonthStats, getRecentActivity } from "@/lib/home/queries";
 import { formatActivity } from "@/lib/home/activity";
-import { addDays, todayJst } from "@/lib/date";
+import { getMonthlyRanking } from "@/lib/ranking-queries";
+import { addDays, monthOf, todayJst } from "@/lib/date";
 import { PageHeader, Section } from "@/components/page";
 import { RealtimeRefresh } from "@/components/realtime-refresh";
-import { Avatar } from "@/components/avatar";
+import { Avatar, MemberName } from "@/components/avatar";
+import { RankBadge } from "@/components/rank-badge";
 import { FitStatus } from "./fit-status";
 import { NextDays } from "./next-days";
 import { NotificationBell } from "./notification-bell";
@@ -16,12 +19,14 @@ import { RelativeTime } from "./relative-time";
 export default async function HomePage() {
   const member = await requireMember();
   const today = todayJst();
-  const [active, schedules, stats, activity] = await Promise.all([
+  const [active, schedules, stats, activity, ranking] = await Promise.all([
     listActiveCheckIns(),
     listSchedules(today, addDays(today, 4)),
     getMyMonthStats(),
     getRecentActivity(),
+    getMonthlyRanking(monthOf(today), "visits"),
   ]);
+  const top = ranking.filter((r) => r.visits > 0).slice(0, 3);
 
   return (
     <>
@@ -51,6 +56,26 @@ export default async function HomePage() {
           ))}
         </dl>
       </Section>
+
+      <section className="mx-4 mb-4 rounded-xl border border-border bg-surface p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="font-semibold">今月のランキング</h2>
+          <Link href="/ranking" className="text-sm text-muted">すべて見る ›</Link>
+        </div>
+        {top.length === 0 ? (
+          <p className="text-sm text-muted">今月はまだ記録がありません</p>
+        ) : (
+          <ol className="space-y-2">
+            {top.map((r) => (
+              <li key={r.userId} className={`flex items-center gap-3 text-sm ${r.userId === member.id ? "font-semibold" : ""}`}>
+                <RankBadge rank={r.rank} />
+                <MemberName userId={r.userId} name={r.displayName} size={28} className="flex-1" />
+                <span className="shrink-0">Fit {r.visits}回</span>
+              </li>
+            ))}
+          </ol>
+        )}
+      </section>
 
       <Section title="最近の活動">
         {activity.length === 0 ? (

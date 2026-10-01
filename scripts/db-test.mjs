@@ -76,6 +76,14 @@ async function asService(sql, params) {
     await db.exec("reset role;");
   }
 }
+async function asAnon(sql, params) {
+  await db.exec("reset role; select set_config('request.jwt.claim.sub', '', false); set role anon;");
+  try {
+    return (await db.query(sql, params)).rows;
+  } finally {
+    await db.exec("reset role;");
+  }
+}
 async function rejects(fn, pattern, label) {
   await assert.rejects(fn, pattern, label);
 }
@@ -422,6 +430,21 @@ await test("プロフィール画像: 非公開バケット、保存先は利用
   await rejects(() => as("A", "update users set avatar_path = 'x' where id = $1", [ids.A]), /permission denied/);
   const rows = await as("B", "select avatar_path from users where id = $1", [ids.A]);
   assert.equal(rows.length, 1, "メンバーは他メンバーの画像の有無を参照できる");
+});
+
+await test("総合ランキング: 今月の訪問回数と種目数、記録0件も含む、グループ外は取得不可", async () => {
+  const rows = await as("A", "select * from monthly_ranking(jst_today())");
+  const byName = Object.fromEntries(rows.map((r) => [r.display_name, r]));
+  assert.equal(byName["Bさん"].visits, 1);
+  assert.equal(byName["Bさん"].exercise_kinds, 2);
+  assert.equal(byName["Cさん"].visits, 1);
+  assert.equal(byName["Cさん"].exercise_kinds, 0);
+  assert.equal(byName["Aさん"].visits, 0, "記録0件も0として含む");
+  assert.equal(byName["Dさん"], undefined, "グループ外のユーザーは含まない");
+  const last = await as("A", "select * from monthly_ranking((jst_today() - interval '1 month')::date)");
+  assert.ok(last.every((r) => r.visits === 0), "先月は記録なし");
+  assert.equal((await as("D", "select * from monthly_ranking(jst_today())")).length, 0);
+  await rejects(() => asAnon("select * from monthly_ranking(jst_today())"), /permission denied/);
 });
 
 await test("アプリのクエリが指定している外部キー名が存在する", async () => {

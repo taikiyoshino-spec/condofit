@@ -2,6 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { jstDateOf, sessionRepresentative, type Entry, type ExerciseType } from "@/lib/records/format";
 import { monthOf, todayJst } from "@/lib/date";
+import { assignRanks, byDesc, type Ranked } from "@/lib/ranking";
 
 export type BodyPart = { id: string; name: string; displayOrder: number; active: boolean };
 export type Exercise = {
@@ -70,17 +71,23 @@ export async function getExercise(id: string): Promise<Exercise | null> {
 
 export type MemberRepresentative = { userId: string; displayName: string; value: Entry };
 
-/** 今月のメンバー代表値（ランキングではないため表示名順） */
-export async function getMonthRepresentatives(exerciseId: string): Promise<MemberRepresentative[]> {
+/** 今月のメンバー代表値と順位（重量系: 重量→回数の大きい順、有酸素: 時間→距離の大きい順。同じ値は同順位） */
+export async function getMonthRepresentatives(exercise: Exercise): Promise<Ranked<MemberRepresentative>[]> {
+  const exerciseId = exercise.id;
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("exercise_month_summary", { p_exercise_id: exerciseId });
   if (error) throw error;
   const n = (v: unknown) => (v === null || v === undefined ? null : Number(v));
-  return (data as Record<string, unknown>[]).map((r) => ({
+  const rows = (data as Record<string, unknown>[]).map((r) => ({
     userId: r.user_id as string,
     displayName: r.display_name as string,
     value: { weight_kg: n(r.weight_kg), reps: n(r.reps), duration_min: n(r.duration_min), distance_km: n(r.distance_km) },
   }));
+  const compare =
+    exercise.type === "weight"
+      ? byDesc<MemberRepresentative>((r) => r.value.weight_kg, (r) => r.value.reps)
+      : byDesc<MemberRepresentative>((r) => r.value.duration_min, (r) => r.value.distance_km);
+  return assignRanks(rows, compare);
 }
 
 export type HistoryPoint = { sessionId: string; date: string; value: Entry | null; entries: Entry[] };
