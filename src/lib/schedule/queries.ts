@@ -1,6 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import type { Intention, TimeSlot } from "@/lib/schedule/time-slots";
+import { groupVisits, type DayVisits } from "@/lib/schedule/visits";
 
 export type Participant = { userId: string; displayName: string; intention: Intention };
 export type Schedule = {
@@ -71,4 +72,28 @@ export async function getSchedule(id: string): Promise<Schedule | null> {
   const { data, error } = await supabase.from("schedules").select(SELECT).eq("id", id).maybeSingle();
   if (error) return null;
   return data ? toSchedule(data as unknown as Row) : null;
+}
+
+/**
+ * 期間内（JSTの日付、両端含む）に誰がいつ頃Fitに行ったか。トレーニング記録の日時を使う（チェックインは使わない）。
+ * 共有するのは時間帯と名前だけ（種目・重量などは含めない）
+ */
+export async function listVisits(start: string, end: string): Promise<Map<string, DayVisits>> {
+  const supabase = await createClient();
+  const from = new Date(`${start}T00:00:00+09:00`);
+  const to = new Date(new Date(`${end}T00:00:00+09:00`).getTime() + 24 * 60 * 60 * 1000);
+  const { data, error } = await supabase
+    .from("training_sessions")
+    .select("user_id, performed_at, users(display_name)")
+    .gte("performed_at", from.toISOString())
+    .lt("performed_at", to.toISOString())
+    .order("performed_at");
+  if (error) throw error;
+  return groupVisits(
+    (data as unknown as { user_id: string; performed_at: string; users: { display_name: string } | null }[]).map((r) => ({
+      userId: r.user_id,
+      displayName: r.users?.display_name ?? "",
+      performedAt: r.performed_at,
+    })),
+  );
 }

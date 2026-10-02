@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireMember } from "@/lib/auth/session";
-import { listSchedules } from "@/lib/schedule/queries";
+import { listSchedules, listVisits } from "@/lib/schedule/queries";
 import { INTENTION_LABEL, TIME_SLOT_LABEL } from "@/lib/schedule/time-slots";
 import { formatDate, isValidDateString, monthOf, todayJst } from "@/lib/date";
 import { PageHeader, Section } from "@/components/page";
@@ -9,18 +9,27 @@ import { RealtimeRefresh } from "@/components/realtime-refresh";
 import { TimeSlotIcon } from "@/components/time-slot-icon";
 import { CreateSchedule } from "./create-schedule";
 import { ParticipantList } from "@/components/participants";
+import { DayVisitsSection } from "./day-visits";
 
 export default async function DaySchedulePage({ params }: PageProps<"/schedule/[date]">) {
   const member = await requireMember();
   const { date } = await params;
   if (!isValidDateString(date)) notFound();
-  const schedules = await listSchedules(date, date);
-  const isPast = date < todayJst();
+  const today = todayJst();
+  const isPast = date < today;
+  // 今日と過去の日は「行った人」も出す（未来はまだ記録がない）
+  const [schedules, visits] = await Promise.all([
+    listSchedules(date, date),
+    date <= today ? listVisits(date, date) : Promise.resolve(null),
+  ]);
 
   return (
     <>
-      <RealtimeRefresh tables={["schedules", "schedule_participants"]} />
+      <RealtimeRefresh tables={["schedules", "schedule_participants", "training_sessions"]} />
       <PageHeader title={formatDate(date)} back={`/schedule?m=${monthOf(date)}`} />
+
+      {visits && <DayVisitsSection visits={visits.get(date)} isToday={date === today} />}
+      {visits && <h2 className="mx-4 mb-2 text-sm font-medium text-muted">予定</h2>}
 
       {schedules.length === 0 ? (
         <Section>
