@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { jstDateOf } from "@/lib/records/format";
 import { todayJst } from "@/lib/date";
 import type { Entry, ExerciseType } from "@/lib/records/format";
+import { summarizeProgress, type ExerciseProgressSummary } from "@/lib/records/progress";
 
 export type SessionExercise = {
   exerciseId: string;
@@ -171,4 +172,48 @@ export async function defaultPerformedAt(userId: string): Promise<string> {
     .maybeSingle();
   const at = data?.checked_in_at as string | undefined;
   return at && jstDateOf(at) === today ? at : new Date().toISOString();
+}
+
+export type RecentProgress = {
+  exerciseId: string;
+  name: string;
+  type: ExerciseType;
+  summary: ExerciseProgressSummary;
+};
+
+/** 記録タブの「最近の成長」: 最近やった種目（最大 limit 件）ごとの推移の要約 */
+export async function getMyRecentProgress(userId: string, limit = 4): Promise<RecentProgress[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("training_sessions")
+    .select(DETAIL)
+    .eq("user_id", userId)
+    .order("performed_at", { ascending: false })
+    .limit(120);
+  if (error) throw error;
+  const sessions = (data as unknown as Row[]).map(toSession);
+
+  const order: string[] = [];
+  const meta = new Map<string, { name: string; type: ExerciseType }>();
+  for (const s of sessions) {
+    for (const ex of s.exercises) {
+      if (!meta.has(ex.exerciseId)) {
+        meta.set(ex.exerciseId, { name: ex.name, type: ex.type });
+        order.push(ex.exerciseId);
+      }
+    }
+  }
+
+  const result: RecentProgress[] = [];
+  for (const id of order) {
+    if (result.length >= limit) break;
+    const { name, type } = meta.get(id)!;
+    // セッション内の同じ種目はまとめる
+    const history = sessions
+      .map((s) => ({ date: jstDateOf(s.performedAt), entries: s.exercises.filter((e) => e.exerciseId === id).flatMap((e) => e.entries) }))
+      .filter((h) => h.entries.length > 0);
+    const summary = summarizeProgress(type, history);
+    if (summary) result.push({ exerciseId: id, name, type, summary });
+  }
+  return result;
 }

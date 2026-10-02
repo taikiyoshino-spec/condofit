@@ -3,9 +3,11 @@ import assert from "node:assert/strict";
 import {
   detectPersonalBests,
   estimate1rm,
+  formatDelta,
   formatMetric,
   progressSeries,
   sessionMetrics,
+  summarizeProgress,
 } from "../src/lib/records/progress.ts";
 
 const w = (weight_kg: number | null, reps: number | null) => ({ weight_kg, reps, duration_min: null, distance_km: null });
@@ -74,4 +76,42 @@ test("表示形式", () => {
   assert.equal(formatMetric("maxWeight", 60, 5), "60kg×5回");
   assert.equal(formatMetric("volume", 1100), "1,100kg");
   assert.equal(formatMetric("distance", 2.25), "2.25km");
+});
+
+
+test("最近の成長の要約: 重量系は最大重量、前回との差、自己ベスト", () => {
+  const s = summarizeProgress("weight", [
+    { date: "2026-09-01", entries: [w(50, 8)] },
+    { date: "2026-09-08", entries: [w(55, 5)] },
+    { date: "2026-09-15", entries: [w(60, 5)] },
+  ])!;
+  assert.equal(s.metric, "maxWeight");
+  assert.deepEqual(s.series, [50, 55, 60]);
+  assert.equal(s.latest, 60);
+  assert.equal(s.latestReps, 5);
+  assert.equal(s.delta, 5);
+  assert.equal(s.isBest, true);
+
+  const down = summarizeProgress("weight", [
+    { date: "2026-09-01", entries: [w(60, 5)] },
+    { date: "2026-09-08", entries: [w(57.5, 6)] },
+  ])!;
+  assert.equal(down.delta, -2.5);
+  assert.equal(down.isBest, false);
+
+  const first = summarizeProgress("weight", [{ date: "2026-09-01", entries: [w(40, 10)] }])!;
+  assert.equal(first.delta, null);
+  assert.equal(first.isBest, false, "初回は自己ベスト扱いにしない");
+});
+
+test("最近の成長の要約: 有酸素は時間、時間がなければ距離。値がなければ null", () => {
+  assert.equal(summarizeProgress("cardio", [{ date: "2026-09-01", entries: [c(20, 2)] }])!.metric, "duration");
+  assert.equal(summarizeProgress("cardio", [{ date: "2026-09-01", entries: [c(null, 2)] }])!.metric, "distance");
+  assert.equal(summarizeProgress("weight", [{ date: "2026-09-01", entries: [w(null, null)] }]), null);
+});
+
+test("差の表示", () => {
+  assert.equal(formatDelta("maxWeight", 2.5), "+2.5kg");
+  assert.equal(formatDelta("duration", -5), "−5分");
+  assert.equal(formatDelta("maxWeight", 0), "±0kg");
 });

@@ -113,3 +113,40 @@ export function formatMetric(metric: ProgressMetric, value: number, repsAtMax: n
   if (metric === "maxWeight" && repsAtMax !== null) return `${fmt(value)}${unit}×${repsAtMax}回`;
   return `${fmt(value)}${unit}`;
 }
+
+export type ExerciseProgressSummary = {
+  metric: ProgressMetric;
+  series: number[]; // 古い順（スパークライン用、最大12点）
+  latest: number;
+  latestReps: number | null;
+  delta: number | null; // 前回との差（前回がなければ null）
+  isBest: boolean; // 最新が自己ベスト更新（2回目以降のみ）
+};
+
+/** 記録タブの「最近の成長」用の要約。重量系は最大重量、有酸素は時間（なければ距離） */
+export function summarizeProgress(type: ExerciseType, sessions: { date: string; entries: Entry[] }[]): ExerciseProgressSummary | null {
+  const candidates: ProgressMetric[] = type === "weight" ? ["maxWeight"] : ["duration", "distance"];
+  for (const metric of candidates) {
+    const points = progressSeries(sessions, metric);
+    if (points.length === 0) continue;
+    const last = points[points.length - 1];
+    const prev = points.length > 1 ? points[points.length - 2] : null;
+    const prevBest = points.length > 1 ? Math.max(...points.slice(0, -1).map((p) => p.value)) : null;
+    return {
+      metric,
+      series: points.slice(-12).map((p) => p.value),
+      latest: last.value,
+      latestReps: last.repsAtMax,
+      delta: prev ? round(last.value - prev.value, 2) : null,
+      isBest: prevBest !== null && last.value > prevBest,
+    };
+  }
+  return null;
+}
+
+/** 「+2.5kg」「-5分」「±0kg」 */
+export function formatDelta(metric: ProgressMetric, delta: number): string {
+  const { unit } = METRIC_INFO[metric];
+  if (delta === 0) return `±0${unit}`;
+  return `${delta > 0 ? "+" : "−"}${fmt(Math.abs(delta))}${unit}`;
+}

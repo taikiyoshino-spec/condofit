@@ -1,13 +1,14 @@
 import Link from "next/link";
 import { requireMember } from "@/lib/auth/session";
-import { listMySessions } from "@/lib/records/queries";
+import { getMyRecentProgress, listMySessions } from "@/lib/records/queries";
 import { jstDateOf } from "@/lib/records/format";
 import { formatDate } from "@/lib/date";
 import { PageHeader, Section } from "@/components/page";
+import { RecentProgressList } from "./recent-progress";
 
 export default async function RecordsPage() {
   const member = await requireMember();
-  const sessions = await listMySessions(member.id);
+  const [sessions, progress] = await Promise.all([listMySessions(member.id), getMyRecentProgress(member.id)]);
 
   // 日付ごとにまとめる（同じ日に複数回行った場合も1日として表示）
   const days = new Map<string, { names: string[]; kinds: Set<string> }>();
@@ -31,6 +32,8 @@ export default async function RecordsPage() {
           </Link>
         }
       />
+      <RecentProgressList items={progress} />
+      {days.size > 0 && <h2 className="mx-4 mb-2 text-sm font-medium text-muted">日付ごと</h2>}
       {days.size === 0 ? (
         <Section>
           <p className="text-sm text-muted">まだ記録がありません。Fitに行ったら「記録する」から残しましょう。</p>
