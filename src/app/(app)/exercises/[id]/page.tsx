@@ -5,6 +5,7 @@ import { formatEntry } from "@/lib/records/format";
 import { PageHeader, Section } from "@/components/page";
 import { RealtimeRefresh } from "@/components/realtime-refresh";
 import { ExerciseHistory } from "@/components/exercise-history";
+import { ProgressChart } from "@/components/progress-chart";
 import { MemberName } from "@/components/avatar";
 import { RankBadge } from "@/components/rank-badge";
 
@@ -47,6 +48,8 @@ export default async function ExerciseDetailPage({ params }: PageProps<"/exercis
       </Section>
 
       <Section title="自分の推移">
+        <ProgressChart type={exercise.type} sessions={history.map((h) => ({ date: h.date, entries: h.entries }))} />
+        <h3 className="mb-1 mt-5 text-sm font-medium text-muted">記録の一覧</h3>
         <ExerciseHistory type={exercise.type} points={history} />
       </Section>
     </>

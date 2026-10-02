@@ -6,6 +6,7 @@ import { formatEntry } from "@/lib/records/format";
 import { formatDate } from "@/lib/date";
 import { PageHeader, Section } from "@/components/page";
 import { ExerciseHistory } from "@/components/exercise-history";
+import { ProgressChart } from "@/components/progress-chart";
 
 const UUID_RE = /^[0-9a-f-]{36}$/i;
 
@@ -37,6 +38,8 @@ export default async function ActivityExercisePage({ params }: PageProps<"/mypag
         </Link>
       </Section>
       <Section title="過去推移">
+        <ProgressChart type={exercise.type} sessions={history.map((h) => ({ date: h.date, entries: h.entries }))} />
+        <h3 className="mb-1 mt-5 text-sm font-medium text-muted">記録の一覧</h3>
         <ExerciseHistory type={exercise.type} points={history} />
       </Section>
     </>

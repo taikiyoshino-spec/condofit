@@ -3,14 +3,15 @@
 import { revalidatePath } from "next/cache";
 import { requireMember } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
-import { fromJstInputValue, type Entry } from "@/lib/records/format";
+import { fromJstInputValue, type Entry, type ExerciseType } from "@/lib/records/format";
+import { detectPersonalBests, formatMetric, METRIC_INFO } from "@/lib/records/progress";
 
 export type SaveInput = {
   performedAtLocal: string; // JST の "YYYY-MM-DDTHH:mm"
   exercises: { exerciseId: string; entries: Entry[] }[];
 };
 
-export type SaveResult = { ok: true; id: string } | { ok: false; error: string };
+export type SaveResult = { ok: true; id: string; personalBests: string[] } | { ok: false; error: string };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_EXERCISES = 50;
@@ -32,7 +33,7 @@ function revalidate() {
 
 /** 記録の保存（新規は sessionId = null）。本人以外の記録はDB側で更新できない */
 export async function saveSessionAction(sessionId: string | null, input: SaveInput): Promise<SaveResult> {
-  await requireMember();
+  const member = await requireMember();
   if (sessionId !== null && !UUID_RE.test(sessionId)) return { ok: false, error: "不正な記録です" };
 
   const performedAt = fromJstInputValue(input.performedAtLocal);
@@ -64,7 +65,10 @@ export async function saveSessionAction(sessionId: string | null, input: SaveInp
     return { ok: false, error: error.message.includes("forbidden") ? "自分の記録だけ編集できます" : "保存できませんでした" };
   }
   revalidate();
-  return { ok: true, id: data as string };
+  const savedId = data as string;
+  // 自己ベストの判定に失敗しても保存自体は成功扱い
+  const personalBests = await findPersonalBests(member.id, savedId, payload).catch(() => []);
+  return { ok: true, id: savedId, personalBests };
 }
 
 export async function deleteSessionAction(sessionId: string): Promise<{ ok: boolean; error?: string }> {
@@ -80,4 +84,55 @@ export async function deleteSessionAction(sessionId: string): Promise<{ ok: bool
   if (error || !data.length) return { ok: false, error: "自分の記録だけ削除できます" };
   revalidate();
   return { ok: true };
+}
+
+type SavedExercise = { exercise_id: string; entries: Partial<Entry>[] };
+
+const toEntry = (e: Partial<Entry>): Entry => ({
+  weight_kg: e.weight_kg ?? null,
+  reps: e.reps ?? null,
+  duration_min: e.duration_min ?? null,
+  distance_km: e.distance_km ?? null,
+});
+
+/** 今回保存した記録で更新した自己ベスト（「ラットプル 最大重量 60kg×5回」の形）。過去の自分の記録とだけ比べる */
+async function findPersonalBests(userId: string, savedId: string, saved: SavedExercise[]): Promise<string[]> {
+  const ids = [...new Set(saved.map((s) => s.exercise_id))];
+  if (ids.length === 0) return [];
+  const supabase = await createClient();
+  const [exercises, past] = await Promise.all([
+    supabase.from("exercises").select("id, name, type").in("id", ids),
+    supabase
+      .from("training_sessions")
+      .select("id, session_exercises!inner(exercise_id, exercise_entries(weight_kg, reps, duration_min, distance_km))")
+      .eq("user_id", userId)
+      .neq("id", savedId)
+      .in("session_exercises.exercise_id", ids)
+      .limit(1000),
+  ]);
+  if (exercises.error || past.error) return [];
+
+  type PastRow = { session_exercises: { exercise_id: string; exercise_entries: Entry[] }[] };
+  const num = (v: unknown) => (v === null || v === undefined ? null : Number(v));
+  const messages: string[] = [];
+  for (const ex of exercises.data as { id: string; name: string; type: ExerciseType }[]) {
+    const current = saved.filter((s) => s.exercise_id === ex.id).flatMap((s) => s.entries.map(toEntry));
+    // 過去はセッション単位（同じセッション内の同じ種目はまとめる）
+    const others = (past.data as unknown as PastRow[]).map((row) =>
+      row.session_exercises
+        .filter((se) => se.exercise_id === ex.id)
+        .flatMap((se) =>
+          se.exercise_entries.map((e) => ({
+            weight_kg: num(e.weight_kg),
+            reps: num(e.reps),
+            duration_min: num(e.duration_min),
+            distance_km: num(e.distance_km),
+          })),
+        ),
+    );
+    for (const pb of detectPersonalBests(ex.type, current, others)) {
+      messages.push(`${ex.name} ${METRIC_INFO[pb.metric].label} ${formatMetric(pb.metric, pb.value, pb.repsAtMax)}`);
+    }
+  }
+  return messages;
 }

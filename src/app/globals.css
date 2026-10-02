@@ -10,6 +10,8 @@
   --accent-fg: #ffffff;
   --danger: #c0392b;
   --warn: #b7791f;
+  --chart-1: #1f8a4c; /* グラフの系列色（validate_palette で light 判定済み） */
+  --chart-grid: #e8ebe7;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -23,6 +25,8 @@
     --accent-fg: #0d1a12;
     --danger: #ef6b5b;
     --warn: #e0a84a;
+    --chart-1: #33a865; /* dark 判定済み */
+    --chart-grid: #2a2f2b;
   }
 }
 
@@ -36,6 +40,8 @@
   --color-accent-fg: var(--accent-fg);
   --color-danger: var(--danger);
   --color-warn: var(--warn);
+  --color-chart-1: var(--chart-1);
+  --color-chart-grid: var(--chart-grid);
 }
 
 body {

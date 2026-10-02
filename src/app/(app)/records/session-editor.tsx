@@ -86,7 +86,11 @@ export function SessionEditor({ sessionId, initialPerformedAt, initialExercises,
       }));
       const result = await saveSessionAction(sessionId, { performedAtLocal: performedAt, exercises });
       if (!result.ok) return setError(result.error);
-      showToast("記録を保存しました");
+      if (result.personalBests.length > 0) {
+        for (const pb of result.personalBests.slice(0, 3)) showToast(`🎉 自己ベスト更新！ ${pb}`, { variant: "celebrate" });
+      } else {
+        showToast("記録を保存しました");
+      }
       router.push(`/records/${jstDateOf(new Date(`${performedAt}:00+09:00`).toISOString())}`);
       router.refresh();
     });
