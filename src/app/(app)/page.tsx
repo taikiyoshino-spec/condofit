@@ -16,6 +16,7 @@ import { NextDays } from "./next-days";
 import { NotificationBell } from "./notification-bell";
 import { RelativeTime } from "./relative-time";
 import { InstallPrompt } from "./install-prompt";
+import { PushPrompt } from "./push-prompt";
 
 export default async function HomePage() {
   const member = await requireMember();
@@ -34,6 +35,7 @@ export default async function HomePage() {
       <RealtimeRefresh tables={["schedules", "schedule_participants", "training_sessions"]} />
       <PageHeader title="CondoFit" action={<NotificationBell myId={member.id} />} />
       <InstallPrompt />
+      <PushPrompt vapidPublicKey={process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? ""} sessionId={member.sessionId} />
 
       <Suspense>
         <FitStatus initial={active} myId={member.id} />

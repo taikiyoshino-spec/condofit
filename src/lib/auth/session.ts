@@ -8,6 +8,8 @@ export type Member = {
   displayName: string;
   role: "admin" | "member";
   groupId: string;
+  /** ログインごとに変わるID（再ログインまで有効な「この案内を消した」等の記憶に使う） */
+  sessionId: string;
 };
 
 /** ログイン中かつ利用停止されていないメンバー。該当しなければ null */
@@ -15,6 +17,7 @@ export const getCurrentMember = cache(async (): Promise<Member | null> => {
   const supabase = await createClient();
   const { data: claims } = await supabase.auth.getClaims();
   const userId = claims?.claims?.sub;
+  const sessionId = String((claims?.claims as { session_id?: string } | undefined)?.session_id ?? "");
   if (!userId) return null;
 
   // RLS により、利用停止・グループ外のユーザーはここで何も取得できない
@@ -32,6 +35,7 @@ export const getCurrentMember = cache(async (): Promise<Member | null> => {
     displayName: user.display_name,
     role: data.role as Member["role"],
     groupId: data.group_id as string,
+    sessionId,
   };
 });
 

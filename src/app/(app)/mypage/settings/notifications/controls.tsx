@@ -3,10 +3,10 @@
 import { useEffect, useState, useTransition } from "react";
 import {
   removePushSubscriptionAction,
-  savePushSubscriptionAction,
   updateNotificationSettingAction,
   type NotificationSettingKey,
 } from "@/app/actions/checkin";
+import { enablePush, hasDeviceSubscription, pushSupported } from "@/lib/client/push";
 
 type Settings = Record<NotificationSettingKey, boolean>;
 
@@ -49,12 +49,6 @@ export function SettingToggles({ initial }: { initial: Settings }) {
   );
 }
 
-function urlBase64ToUint8Array(base64: string) {
-  const padding = "=".repeat((4 - (base64.length % 4)) % 4);
-  const raw = atob((base64 + padding).replace(/-/g, "+").replace(/_/g, "/"));
-  return Uint8Array.from(raw, (c) => c.charCodeAt(0));
-}
-
 type PushState = "loading" | "unsupported" | "ios_needs_install" | "denied" | "off" | "on";
 
 export function PushToggle({ vapidPublicKey }: { vapidPublicKey: string }) {
@@ -66,14 +60,12 @@ export function PushToggle({ vapidPublicKey }: { vapidPublicKey: string }) {
     (async () => {
       const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
       const standalone = window.matchMedia("(display-mode: standalone)").matches;
-      if (!("serviceWorker" in navigator) || !("PushManager" in window) || !vapidPublicKey) {
+      if (!pushSupported(vapidPublicKey)) {
         setState(isIos && !standalone ? "ios_needs_install" : "unsupported");
         return;
       }
       if (Notification.permission === "denied") return setState("denied");
-      const reg = await navigator.serviceWorker.ready;
-      const sub = await reg.pushManager.getSubscription();
-      setState(sub ? "on" : "off");
+      setState((await hasDeviceSubscription()) ? "on" : "off");
     })();
   }, [vapidPublicKey]);
 
@@ -81,16 +73,7 @@ export function PushToggle({ vapidPublicKey }: { vapidPublicKey: string }) {
     startTransition(async () => {
       setError(null);
       try {
-        const permission = await Notification.requestPermission();
-        if (permission !== "granted") return setState(permission === "denied" ? "denied" : "off");
-        const reg = await navigator.serviceWorker.ready;
-        const sub = await reg.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
-        });
-        const result = await savePushSubscriptionAction(JSON.parse(JSON.stringify(sub)));
-        if (!result.ok) throw new Error();
-        setState("on");
+        setState(await enablePush(vapidPublicKey));
       } catch {
         setError("プッシュ通知を有効にできませんでした");
       }
