@@ -44,15 +44,19 @@ function ExerciseName({ name }: { name: string }) {
   );
 }
 
-export function RecentProgressList({ items }: { items: RecentProgress[] }) {
+type ListProps = { items: RecentProgress[]; title?: string; moreHref?: string };
+
+export function RecentProgressList({ items, title = "最近の成長", moreHref }: ListProps) {
   if (items.length === 0) return null;
   return (
-    <section className="mx-4 mb-4 rounded-xl border border-border bg-surface p-4" aria-label="最近の成長">
+    <section className="mx-4 mb-4 rounded-xl border border-border bg-surface p-4" aria-label={title}>
       <div className="mb-2 flex items-center justify-between">
-        <h2 className="font-semibold">最近の成長</h2>
-        <Link href="/mypage/activity" className="text-sm text-muted">
-          すべて見る ›
-        </Link>
+        <h2 className="font-semibold">{title}</h2>
+        {moreHref && (
+          <Link href={moreHref} className="text-sm text-muted">
+            すべて見る ›
+          </Link>
+        )}
       </div>
       <ul className="divide-y divide-border">
         {items.map(({ exerciseId, name, summary: s }) => (

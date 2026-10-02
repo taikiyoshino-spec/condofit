@@ -32,7 +32,7 @@ export default async function RecordsPage() {
           </Link>
         }
       />
-      <RecentProgressList items={progress} />
+      <RecentProgressList items={progress} moreHref="/records/progress" />
       {days.size > 0 && <h2 className="mx-4 mb-2 text-sm font-medium text-muted">日付ごと</h2>}
       {days.size === 0 ? (
         <Section>

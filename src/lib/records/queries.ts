@@ -189,7 +189,8 @@ export async function getMyRecentProgress(userId: string, limit = 4): Promise<Re
     .select(DETAIL)
     .eq("user_id", userId)
     .order("performed_at", { ascending: false })
-    .limit(120);
+    // 一覧（limit 無制限）のときは古い種目も拾えるよう広く取る
+    .limit(Number.isFinite(limit) ? 120 : 1000);
   if (error) throw error;
   const sessions = (data as unknown as Row[]).map(toSession);
 
