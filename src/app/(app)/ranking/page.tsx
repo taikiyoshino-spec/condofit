@@ -94,16 +94,25 @@ export default async function RankingPage({ searchParams }: PageProps<"/ranking"
                           ›
                         </span>
                       </summary>
-                      <ul className="mb-3 ml-9 space-y-1 rounded-lg bg-bg p-3 text-sm">
-                        {done.map((e) => (
-                          <li key={e.exerciseId}>
-                            <Link href={`/exercises/${e.exerciseId}`} className="flex justify-between gap-3">
-                              <span className="truncate">{e.name}</span>
-                              <span className="shrink-0 text-muted">{e.count}回</span>
-                            </Link>
-                          </li>
-                        ))}
-                      </ul>
+                      <div className="mb-3 ml-9">
+                        <p className="mb-1.5 text-xs text-muted">タップすると種目の詳細へ</p>
+                        <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-surface text-sm">
+                          {done.map((e) => (
+                            <li key={e.exerciseId}>
+                              <Link
+                                href={`/exercises/${e.exerciseId}`}
+                                className="flex items-center gap-3 px-3 py-2.5 active:bg-bg"
+                              >
+                                <span className="min-w-0 flex-1 truncate">{e.name}</span>
+                                <span className="shrink-0 text-muted">{e.count}回</span>
+                                <span className="shrink-0 text-muted" aria-hidden>
+                                  ›
+                                </span>
+                              </Link>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
                     </details>
                   </li>
                 );
