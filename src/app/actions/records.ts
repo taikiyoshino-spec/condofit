@@ -31,8 +31,15 @@ function revalidate() {
   revalidatePath("/mypage/activity", "layout");
 }
 
-/** 記録の保存（新規は sessionId = null）。本人以外の記録はDB側で更新できない */
-export async function saveSessionAction(sessionId: string | null, input: SaveInput): Promise<SaveResult> {
+/**
+ * 記録の保存（新規は sessionId = null）。本人以外の記録はDB側で更新できない。
+ * 入力中の自動保存では revalidate: false にする（画面が再取得されて入力中の値が消えないように）。完了時に finishSessionAction で反映する
+ */
+export async function saveSessionAction(
+  sessionId: string | null,
+  input: SaveInput,
+  options: { revalidate?: boolean } = {},
+): Promise<SaveResult> {
   const member = await requireMember();
   if (sessionId !== null && !UUID_RE.test(sessionId)) return { ok: false, error: "不正な記録です" };
 
@@ -64,11 +71,17 @@ export async function saveSessionAction(sessionId: string | null, input: SaveInp
   if (error) {
     return { ok: false, error: error.message.includes("forbidden") ? "自分の記録だけ編集できます" : "保存できませんでした" };
   }
-  revalidate();
+  if (options.revalidate !== false) revalidate();
   const savedId = data as string;
   // 自己ベストの判定に失敗しても保存自体は成功扱い
   const personalBests = await findPersonalBests(member.id, savedId, payload).catch(() => []);
   return { ok: true, id: savedId, personalBests };
+}
+
+/** 入力の完了時に、記録タブ・ホーム・種目などの表示を最新にする */
+export async function finishSessionAction() {
+  await requireMember();
+  revalidate();
 }
 
 export async function deleteSessionAction(sessionId: string): Promise<{ ok: boolean; error?: string }> {
