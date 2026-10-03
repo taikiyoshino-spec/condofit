@@ -44,6 +44,12 @@ export function formatNotification(n: NotificationRow): { text: string; sub?: st
     }
     case "schedule_delete":
       return { text: `${who}が予定を削除しました`, sub: `${day(p.date)} ${slot(p.time_slot)}の予定`, href: scheduleHref };
+    case "day_comment":
+      return {
+        text: `${who}が${day(p.date)}の実績にコメントしました`,
+        sub: typeof p.excerpt === "string" ? p.excerpt : undefined,
+        href: typeof p.date === "string" ? `/schedule/${p.date}` : "/schedule",
+      };
     default:
       return { text: "お知らせがあります", href: "/" };
   }

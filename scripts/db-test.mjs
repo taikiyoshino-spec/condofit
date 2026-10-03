@@ -447,6 +447,43 @@ await test("総合ランキング: 今月の訪問回数と種目数、記録0�
   await rejects(() => asAnon("select * from monthly_ranking(jst_today())"), /permission denied/);
 });
 
+await test("実績コメント: 今日以前のみ、行った人と既存コメント者に通知、本人には通知しない", async () => {
+  await clearNotifs();
+  // B・C は今日トレーニング記録がある
+  const [{ id: c1 }] = await as("A", "insert into day_comments (date, body) values (jst_today(), '  今日は混んでた  ') returning id, body");
+  const [{ body }] = await asSuper("select body from day_comments where id = $1", [c1]);
+  assert.equal(body, "今日は混んでた", "前後の空白は取り除く");
+  assert.deepEqual((await notifs("B")).map((n) => n.type), ["day_comment"]);
+  assert.deepEqual((await notifs("C")).map((n) => n.type), ["day_comment"]);
+  assert.equal((await notifs("A")).length, 0);
+  assert.equal((await notifs("B"))[0].payload.excerpt, "今日は混んでた");
+  await clearNotifs();
+
+  await as("B", "insert into day_comments (date, body) values (jst_today(), 'おつかれ')");
+  assert.deepEqual((await notifs("A")).map((n) => n.type), ["day_comment"], "先にコメントした人にも通知");
+  assert.equal((await notifs("B")).length, 0);
+  await clearNotifs();
+
+  await rejects(() => as("A", "insert into day_comments (date, body) values (jst_today() + 1, 'x')"), /future_date/);
+  await rejects(() => as("A", "insert into day_comments (date, body) values (jst_today(), '   ')"), /day_comments_body_len/);
+  await rejects(() => as("A", "insert into day_comments (date, user_id, body) values (jst_today(), $1, 'なりすまし')", [ids.B]), /row-level security/);
+  await rejects(() => as("D", "insert into day_comments (date, body) values (jst_today(), 'x')"), /row-level security/);
+  assert.equal((await as("D", "select * from day_comments")).length, 0);
+  assert.equal((await as("C", "select * from day_comments")).length, 2);
+});
+
+await test("実績コメント: 削除は本人と管理者だけ", async () => {
+  const [{ id: aComment }] = await asSuper("select id from day_comments where user_id = $1", [ids.A]);
+  const [{ id: bComment }] = await asSuper("select id from day_comments where user_id = $1", [ids.B]);
+  // この時点で A・B は管理者、C は一般メンバー
+  const [{ id: cComment }] = await as("C", "insert into day_comments (date, body) values (jst_today(), 'Cのコメント') returning id");
+  assert.equal((await as("C", "delete from day_comments where id = $1 returning id", [aComment])).length, 0, "一般メンバーは他人のコメントを削除できない");
+  assert.equal((await as("C", "delete from day_comments where id = $1 returning id", [cComment])).length, 1, "本人は削除できる");
+  assert.equal((await as("A", "delete from day_comments where id = $1 returning id", [bComment])).length, 1, "管理者は他人のコメントも削除できる");
+  assert.equal((await as("A", "delete from day_comments where id = $1 returning id", [aComment])).length, 1);
+  await rejects(() => as("A", "update day_comments set body = 'x'"), /permission denied/);
+});
+
 await test("アプリのクエリが指定している外部キー名が存在する", async () => {
   const rows = await asSuper(
     "select conname from pg_constraint where conname = any($1)",

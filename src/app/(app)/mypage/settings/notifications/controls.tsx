@@ -13,7 +13,7 @@ type Settings = Record<NotificationSettingKey, boolean>;
 const LABELS: { key: NotificationSettingKey; label: string; hint: string }[] = [
   { key: "check_in", label: "チェックイン通知", hint: "誰かがFitにチェックインしたとき（プッシュ + アプリ内）" },
   { key: "location_stale", label: "位置確認停止通知", hint: "チェックイン中に15分以上位置を確認できないとき（プッシュ + アプリ内）" },
-  { key: "schedule", label: "予定関連アプリ内通知", hint: "予定への参加・キャンセル・変更・削除（アプリ内のみ）" },
+  { key: "schedule", label: "予定・コメントのアプリ内通知", hint: "予定への参加・キャンセル・変更・削除、実績へのコメント（アプリ内のみ）" },
 ];
 
 export function SettingToggles({ initial }: { initial: Settings }) {

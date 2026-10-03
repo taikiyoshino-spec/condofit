@@ -48,3 +48,10 @@ test("最近の活動の文言（詳細は出さない）", () => {
   assert.equal(formatActivity({ ...base, kind: "schedule_created", detail: { date: "2026-09-29", time_slot: "night" } }),
     "Cさんが9/29夜の予定を作成しました");
 });
+
+test("実績コメントの通知は「10/3の実績にコメントしました」とひとこと、その日の画面へ", () => {
+  const f = formatNotification(n("day_comment", { date: "2026-10-03", excerpt: "夕方は空いてた！" }));
+  assert.equal(f.text, "Aさんが10/3の実績にコメントしました");
+  assert.equal(f.sub, "夕方は空いてた！");
+  assert.equal(f.href, "/schedule/2026-10-03");
+});

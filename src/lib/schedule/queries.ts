@@ -97,3 +97,19 @@ export async function listVisits(start: string, end: string): Promise<Map<string
     })),
   );
 }
+
+export type DayComment = { id: string; userId: string; displayName: string; body: string; createdAt: string };
+
+/** その日の実績コメント（古い順） */
+export async function listDayComments(date: string): Promise<DayComment[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("day_comments")
+    .select("id, user_id, body, created_at, users(display_name)")
+    .eq("date", date)
+    .order("created_at");
+  if (error) throw error;
+  return (data as unknown as { id: string; user_id: string; body: string; created_at: string; users: { display_name: string } | null }[]).map(
+    (c) => ({ id: c.id, userId: c.user_id, displayName: c.users?.display_name ?? "", body: c.body, createdAt: c.created_at }),
+  );
+}
