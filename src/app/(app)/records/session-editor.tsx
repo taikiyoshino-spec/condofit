@@ -1,20 +1,29 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { finishSessionAction, saveSessionAction } from "@/app/actions/records";
-import { BottomSheet } from "@/components/bottom-sheet";
 import { showToast } from "@/components/toaster";
-import { jstDateOf, parseNumber, toJstInputValue, type Entry, type ExerciseType } from "@/lib/records/format";
+import { jstDateOf, toJstInputValue, type Entry, type ExerciseType } from "@/lib/records/format";
+import {
+  asManualRow,
+  blocksToExercises,
+  EMPTY_ROW,
+  entryToRow,
+  menuToBlocks,
+  planProgress,
+  type Block,
+  type Row,
+} from "@/lib/records/plan";
 import type { Catalog, CatalogExercise, SessionExercise } from "@/lib/records/queries";
+import { ExercisePicker, IconButton, NumberInput } from "./editor-parts";
+import { PlanRow } from "./plan-row";
 
 // 記録の入力。入力のたびにサーバーへ自動保存する（アプリを閉じても入力が消えないように）
 // - 数値の入力は手を止めてから約0.8秒後、種目や行の追加・削除・並び替えはすぐに保存
 // - 入力欄から離れたとき・アプリを裏に回したときも、未保存があればすぐ保存
 // - 新規は最初の保存で記録を作り、URLを編集画面に切り替える（開き直すと続きから）
 
-type Row = { weight: string; reps: string; duration: string; distance: string };
-type Block = { key: number; exerciseId: string; name: string; type: ExerciseType; rows: Row[] };
 type SaveState =
   | { state: "idle" }
   | { state: "dirty" }
@@ -22,18 +31,38 @@ type SaveState =
   | { state: "saved"; at: number }
   | { state: "error"; message: string };
 
-const EMPTY_ROW: Row = { weight: "", reps: "", duration: "", distance: "" };
 const TYPING_DELAY_MS = 800;
 const STRUCTURE_DELAY_MS = 150;
-const str = (n: number | null) => (n === null ? "" : String(n));
-const toRow = (e: Entry): Row => ({
-  weight: str(e.weight_kg),
-  reps: str(e.reps),
-  duration: str(e.duration_min),
-  distance: str(e.distance_km),
-});
+// メニューで記録中の「まだやっていない予定のセット」はサーバーに保存しないので、この端末に覚えておく
+const PLAN_KEY = (sessionId: string) => `condofit:record-plan:${sessionId}`;
 
 let nextKey = 1;
+const newKey = () => nextKey++;
+
+export type MenuForEditor = {
+  id: string;
+  name: string;
+  items: { exerciseId: string; name: string; type: ExerciseType; sets: Partial<Entry>[] }[];
+};
+type SavedPlan = { menuName: string; blocks: Block[] };
+
+function loadPlan(sessionId: string | null): SavedPlan | null {
+  if (!sessionId) return null;
+  try {
+    const raw = localStorage.getItem(PLAN_KEY(sessionId));
+    return raw ? (JSON.parse(raw) as SavedPlan) : null;
+  } catch {
+    return null;
+  }
+}
+function storePlan(sessionId: string, plan: SavedPlan | null) {
+  try {
+    if (plan) localStorage.setItem(PLAN_KEY(sessionId), JSON.stringify(plan));
+    else localStorage.removeItem(PLAN_KEY(sessionId));
+  } catch {
+    // 保存できない環境では予定の続きは復元されない（できたセットはサーバーに保存済み）
+  }
+}
 
 type Props = {
   sessionId: string | null;
@@ -42,44 +71,61 @@ type Props = {
   catalog: Catalog;
   recentExerciseIds: string[];
   lastEntries: Record<string, Entry[]>;
+  /** メニューから始めたとき */
+  menu?: MenuForEditor | null;
 };
 
+/** 保存する内容は「できた」行だけ（予定・やらなかったセットは記録しない） */
 function toInput(performedAt: string, blocks: Block[]) {
-  return {
-    performedAtLocal: performedAt,
-    exercises: blocks.map((b) => ({
-      exerciseId: b.exerciseId,
-      entries: b.rows.map((r) => ({
-        weight_kg: parseNumber(r.weight, { max: 999 }),
-        reps: parseNumber(r.reps, { integer: true }),
-        duration_min: parseNumber(r.duration),
-        distance_km: parseNumber(r.distance, { max: 999 }),
-      })),
-    })),
-  };
+  return { performedAtLocal: performedAt, exercises: blocksToExercises(blocks) };
 }
 
-export function SessionEditor({ sessionId: initialSessionId, initialPerformedAt, initialExercises, catalog, recentExerciseIds, lastEntries }: Props) {
+export function SessionEditor({
+  sessionId: initialSessionId,
+  initialPerformedAt,
+  initialExercises,
+  catalog,
+  recentExerciseIds,
+  lastEntries,
+  menu,
+}: Props) {
   const router = useRouter();
   const [performedAt, setPerformedAt] = useState(() => toJstInputValue(initialPerformedAt));
   const [blocks, setBlocks] = useState<Block[]>(() =>
-    initialExercises.map((ex) => ({
-      key: nextKey++,
-      exerciseId: ex.exerciseId,
-      name: ex.name,
-      type: ex.type,
-      rows: ex.entries.length ? ex.entries.map(toRow) : [{ ...EMPTY_ROW }],
-    })),
+    menu
+      ? menuToBlocks(menu.items, newKey)
+      : initialExercises.map((ex) => ({
+          key: newKey(),
+          exerciseId: ex.exerciseId,
+          name: ex.name,
+          type: ex.type,
+          rows: ex.entries.length ? ex.entries.map((e) => entryToRow(e)) : [{ ...EMPTY_ROW }],
+        })),
   );
+  const [menuName, setMenuName] = useState(menu?.name ?? null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [save, setSave] = useState<SaveState>(initialSessionId ? { state: "saved", at: 0 } : { state: "idle" });
   const [finishing, setFinishing] = useState(false);
 
   // 保存処理から常に最新の値を読むための参照
-  const latest = useRef({ performedAt, blocks });
+  const latest = useRef({ performedAt, blocks, menuName });
   useEffect(() => {
-    latest.current = { performedAt, blocks };
-  }, [performedAt, blocks]);
+    latest.current = { performedAt, blocks, menuName };
+    // メニューの予定が残っている間は、この端末に予定ごと覚えておく（開き直したら続きから）
+    const sid = sessionIdRef.current;
+    if (sid && menuName) storePlan(sid, blocks.some((b) => b.rows.some((r) => r.fromPlan)) ? { menuName, blocks } : null);
+  }, [performedAt, blocks, menuName]);
+
+  // 開き直したとき、この端末に覚えている予定があれば続きから（サーバーには「できた」分だけ保存されている）
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const plan = loadPlan(initialSessionId);
+      if (!plan) return;
+      setBlocks(plan.blocks.map((b) => ({ ...b, key: newKey() })));
+      setMenuName(plan.menuName);
+    }, 0);
+    return () => clearTimeout(t);
+  }, [initialSessionId]);
   const sessionIdRef = useRef(initialSessionId);
   const dirty = useRef(false);
   const inFlight = useRef<Promise<boolean> | null>(null);
@@ -111,6 +157,8 @@ export function SessionEditor({ sessionId: initialSessionId, initialPerformedAt,
             sessionIdRef.current = result.id;
             // 開き直したときに続きから編集できるよう、URLを編集画面に（画面は作り直さない）
             window.history.replaceState(null, "", `/records/s/${result.id}/edit`);
+            const { blocks: current, menuName: name } = latest.current;
+            if (name && current.some((x) => x.rows.some((r) => r.fromPlan))) storePlan(result.id, { menuName: name, blocks: current });
           }
           for (const pb of result.personalBests) {
             if (celebrated.current.has(pb)) continue;
@@ -170,10 +218,10 @@ export function SessionEditor({ sessionId: initialSessionId, initialPerformedAt,
       // 同一セッション内で同じ種目を追加 → 直前に入力した値を初期値にする
       const sameInSession = [...list].reverse().find((b) => b.exerciseId === ex.id);
       const rows = sameInSession
-        ? [{ ...sameInSession.rows[sameInSession.rows.length - 1] }]
+        ? [asManualRow(sameInSession.rows[sameInSession.rows.length - 1])]
         : // 新しいセッションで追加 → 直近のその種目の記録を初期値（初回は空欄）
-          (lastEntries[ex.id]?.map(toRow) ?? [{ ...EMPTY_ROW }]);
-      return [...list, { key: nextKey++, exerciseId: ex.id, name: ex.name, type: ex.type, rows }];
+          (lastEntries[ex.id]?.map((e) => entryToRow(e)) ?? [{ ...EMPTY_ROW }]);
+      return [...list, { key: newKey(), exerciseId: ex.id, name: ex.name, type: ex.type, rows }];
     });
     setPickerOpen(false);
     scheduleSave(STRUCTURE_DELAY_MS);
@@ -185,12 +233,22 @@ export function SessionEditor({ sessionId: initialSessionId, initialPerformedAt,
   };
 
   /** 数値の入力（手を止めてから保存） */
-  const setField = (key: number, rowIndex: number, field: keyof Row, value: string) =>
+  const setField = (key: number, rowIndex: number, field: "weight" | "reps" | "duration" | "distance", value: string) =>
     update(
       key,
       (blk) => ({ ...blk, rows: blk.rows.map((row, k) => (k === rowIndex ? { ...row, [field]: value } : row)) }),
       TYPING_DELAY_MS,
     );
+
+  /** メニューの予定セット: できた（値を確定）／やらなかった／予定に戻す。すぐ保存 */
+  const setRow = (key: number, rowIndex: number, fn: (row: Row) => Row) =>
+    update(key, (blk) => ({ ...blk, rows: blk.rows.map((row, k) => (k === rowIndex ? fn(row) : row)) }));
+  const markDone = (key: number, rowIndex: number, values?: Partial<Row>) =>
+    setRow(key, rowIndex, (row) => ({ ...row, ...values, status: "done" }));
+  const markSkipped = (key: number, rowIndex: number) => setRow(key, rowIndex, (row) => ({ ...row, status: "skipped" }));
+  const backToPlan = (key: number, rowIndex: number) =>
+    setRow(key, rowIndex, (row) => ({ ...row, ...(row.plan ?? {}), status: "planned" }));
+  const progress = planProgress(blocks);
 
   const move = (index: number, delta: number) => {
     setBlocks((list) => {
@@ -212,6 +270,8 @@ export function SessionEditor({ sessionId: initialSessionId, initialPerformedAt,
       return;
     }
     await finishSessionAction();
+    // 完了したら、やらなかった予定は残さない
+    if (sessionIdRef.current) storePlan(sessionIdRef.current, null);
     if (celebrated.current.size === 0) showToast("記録を保存しました");
     router.push(`/records/${jstDateOf(new Date(`${latest.current.performedAt}:00+09:00`).toISOString())}`);
     router.refresh();
@@ -237,6 +297,21 @@ export function SessionEditor({ sessionId: initialSessionId, initialPerformedAt,
         </label>
       </section>
 
+      {menuName && progress.total > 0 && (
+        <section className="mx-4 mb-4 rounded-xl border border-accent bg-surface p-4" aria-label="メニューの進み具合">
+          <div className="flex items-baseline justify-between">
+            <span className="font-semibold">メニュー：{menuName}</span>
+            <span className="text-sm text-muted">
+              {progress.finished}/{progress.total}セット
+            </span>
+          </div>
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-border" aria-hidden>
+            <div className="h-full rounded-full bg-accent" style={{ width: `${(progress.finished / progress.total) * 100}%` }} />
+          </div>
+          <p className="mt-2 text-xs text-muted">セットごとに「できた」か「できなかった」を押してください。押した分から自動で保存されます。</p>
+        </section>
+      )}
+
       {blocks.length === 0 && (
         <p className="mx-4 mb-4 text-sm text-muted">
           種目を追加すると、入力するたびに自動で保存されます。種目なしでも「完了」で「Fitに行った」として残せます。
@@ -255,8 +330,33 @@ export function SessionEditor({ sessionId: initialSessionId, initialPerformedAt,
 
             <ul className="space-y-2">
               {b.rows.map((r, j) => {
+                if (r.fromPlan && r.status !== "done") {
+                  return (
+                    <li key={j}>
+                      <PlanRow
+                        type={b.type}
+                        row={r}
+                        setNumber={j + 1}
+                        onDone={(values) => markDone(b.key, j, values)}
+                        onSkip={() => markSkipped(b.key, j)}
+                        onUndo={() => backToPlan(b.key, j)}
+                      />
+                    </li>
+                  );
+                }
                 return (
                   <li key={j} className="flex items-center gap-2">
+                    {r.fromPlan && (
+                      <button
+                        type="button"
+                        onClick={() => backToPlan(b.key, j)}
+                        aria-label="予定に戻す"
+                        title="予定に戻す"
+                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-bold text-accent-fg"
+                      >
+                        ✓
+                      </button>
+                    )}
                     {b.type === "weight" ? (
                       <>
                         <NumberInput label="重量" unit="kg" value={r.weight} onChange={(v) => setField(b.key, j, "weight", v)} onBlur={flush} decimal />
@@ -281,7 +381,7 @@ export function SessionEditor({ sessionId: initialSessionId, initialPerformedAt,
             </ul>
             <button
               type="button"
-              onClick={() => update(b.key, (blk) => ({ ...blk, rows: [...blk.rows, { ...blk.rows[blk.rows.length - 1] }] }))}
+              onClick={() => update(b.key, (blk) => ({ ...blk, rows: [...blk.rows, asManualRow(blk.rows[blk.rows.length - 1])] }))}
               className="mt-2 text-sm text-accent"
             >
               ＋ 同じ種目をもう1セット
@@ -329,7 +429,7 @@ function SaveStatus({ save, onRetry }: { save: SaveState; onRetry: () => void })
   return (
     <div className="mb-2 flex justify-center" role="status" aria-live="polite">
       <span className="rounded-full border border-border bg-surface px-3 py-1 text-xs shadow-sm">
-        {save.state === "idle" && <span className="text-muted">種目を追加すると自動で保存されます</span>}
+        {save.state === "idle" && <span className="text-muted">記録すると自動で保存されます</span>}
         {save.state === "dirty" && <span className="text-muted">入力中…</span>}
         {save.state === "saving" && <span className="text-muted">保存中…</span>}
         {save.state === "saved" && (
@@ -345,121 +445,5 @@ function SaveStatus({ save, onRetry }: { save: SaveState; onRetry: () => void })
         )}
       </span>
     </div>
-  );
-}
-
-function NumberInput({
-  label,
-  unit,
-  value,
-  onChange,
-  onBlur,
-  decimal = false,
-}: {
-  label: string;
-  unit: string;
-  value: string;
-  onChange: (v: string) => void;
-  onBlur?: () => void;
-  decimal?: boolean;
-}) {
-  return (
-    <label className="flex min-w-0 flex-1 items-center gap-1 rounded-lg border border-border px-2 focus-within:border-accent">
-      <span className="sr-only">{label}</span>
-      <input
-        type="text"
-        inputMode={decimal ? "decimal" : "numeric"}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onBlur={onBlur}
-        placeholder="—"
-        className="w-full min-w-0 bg-transparent py-2 text-right text-base outline-none"
-      />
-      <span className="text-sm text-muted">{unit}</span>
-    </label>
-  );
-}
-
-function IconButton({ label, onClick, path, disabled }: { label: string; onClick: () => void; path: string; disabled?: boolean }) {
-  return (
-    <button type="button" aria-label={label} onClick={onClick} disabled={disabled} className="rounded p-1.5 text-muted disabled:opacity-30">
-      <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden>
-        <path d={path} />
-      </svg>
-    </button>
-  );
-}
-
-function ExercisePicker({
-  open,
-  onClose,
-  catalog,
-  recentExerciseIds,
-  onPick,
-}: {
-  open: boolean;
-  onClose: () => void;
-  catalog: Catalog;
-  recentExerciseIds: string[];
-  onPick: (ex: CatalogExercise) => void;
-}) {
-  const [partId, setPartId] = useState<string | null>(null);
-  const byId = useMemo(() => new Map(catalog.exercises.map((e) => [e.id, e])), [catalog.exercises]);
-  // 非表示にされた種目は最近使った一覧にも出さない
-  const recent = recentExerciseIds.map((id) => byId.get(id)).filter((e): e is CatalogExercise => Boolean(e)).slice(0, 8);
-  const partExercises = partId ? catalog.exercises.filter((e) => e.bodyPartId === partId) : [];
-  const partName = catalog.bodyParts.find((p) => p.id === partId)?.name;
-
-  return (
-    <BottomSheet
-      open={open}
-      onClose={() => {
-        setPartId(null);
-        onClose();
-      }}
-      title={partId ? `${partName}の種目` : "種目を選ぶ"}
-    >
-      {partId ? (
-        <>
-          <button type="button" onClick={() => setPartId(null)} className="mb-2 text-sm text-muted">
-            ‹ 部位に戻る
-          </button>
-          <ExerciseList items={partExercises} onPick={onPick} />
-        </>
-      ) : (
-        <>
-          {recent.length > 0 && (
-            <div className="mb-4">
-              <h3 className="mb-2 text-sm font-medium text-muted">最近使った種目</h3>
-              <ExerciseList items={recent} onPick={onPick} />
-            </div>
-          )}
-          <h3 className="mb-2 text-sm font-medium text-muted">部位から選ぶ</h3>
-          <div className="grid grid-cols-2 gap-2">
-            {catalog.bodyParts.map((p) => (
-              <button key={p.id} type="button" onClick={() => setPartId(p.id)} className="rounded-lg border border-border py-3 text-sm">
-                {p.name}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-    </BottomSheet>
-  );
-}
-
-function ExerciseList({ items, onPick }: { items: CatalogExercise[]; onPick: (ex: CatalogExercise) => void }) {
-  if (items.length === 0) return <p className="text-sm text-muted">種目がありません</p>;
-  return (
-    <ul className="divide-y divide-border">
-      {items.map((ex) => (
-        <li key={ex.id}>
-          <button type="button" onClick={() => onPick(ex)} className="flex w-full items-center justify-between py-3 text-left">
-            {ex.name}
-            <span className="text-xs text-muted">{ex.type === "weight" ? "重量" : "有酸素"}</span>
-          </button>
-        </li>
-      ))}
-    </ul>
   );
 }

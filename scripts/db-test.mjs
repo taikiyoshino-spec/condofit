@@ -484,6 +484,42 @@ await test("実績コメント: 削除は本人と管理者だけ", async () => 
   await rejects(() => as("A", "update day_comments set body = 'x'"), /permission denied/);
 });
 
+await test("トレーニングメニュー: 自分専用で保存・更新・削除、他人は見えず変更もできない", async () => {
+  const [{ id: chest }] = await asSuper("select id from exercises where name = 'ペックフライ'");
+  const [{ id: run }] = await asSuper("select id from exercises where name = 'ランニングマシン'");
+  const items = JSON.stringify([
+    { exercise_id: chest, sets: [{ weight_kg: 40, reps: 10 }, { weight_kg: 45, reps: 8 }] },
+    { exercise_id: run, sets: [{ duration_min: 20 }] },
+  ]);
+  const [{ save_workout_menu: menuId }] = await as("B", "select save_workout_menu(null, ' 胸の日 ', $1::jsonb)", [items]);
+  const [menu] = await as("B", "select name from workout_menus where id = $1", [menuId]);
+  assert.equal(menu.name, "胸の日");
+  const rows = await as("B", "select exercise_id, display_order, sets from workout_menu_items where menu_id = $1 order by display_order", [menuId]);
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].sets.length, 2);
+  assert.equal(rows[0].sets[1].weight_kg, 45);
+
+  // 更新は中身を入れ替える
+  await as("B", "select save_workout_menu($1, '胸の日2', $2::jsonb)", [menuId, JSON.stringify([{ exercise_id: run, sets: [] }])]);
+  assert.equal((await as("B", "select * from workout_menu_items where menu_id = $1", [menuId])).length, 1);
+
+  // 他人（管理者含む）は見えない・変更できない
+  assert.equal((await as("A", "select * from workout_menus where id = $1", [menuId])).length, 0);
+  assert.equal((await as("A", "select * from workout_menu_items where menu_id = $1", [menuId])).length, 0);
+  await rejects(() => as("A", "select save_workout_menu($1, '乗っ取り', '[]'::jsonb)", [menuId]), /forbidden/);
+  assert.equal((await as("A", "delete from workout_menus where id = $1 returning id", [menuId])).length, 0);
+  await rejects(
+    () => as("A", "insert into workout_menu_items (menu_id, exercise_id) values ($1, $2)", [menuId, run]),
+    /row-level security/,
+  );
+  await rejects(() => as("B", "select save_workout_menu(null, '   ', '[]'::jsonb)"), /workout_menus_name_len/);
+  await rejects(() => as("D", "select save_workout_menu(null, 'x', '[]'::jsonb)"), /row-level security/);
+
+  // 削除すると項目も消える
+  assert.equal((await as("B", "delete from workout_menus where id = $1 returning id", [menuId])).length, 1);
+  assert.equal((await asSuper("select * from workout_menu_items where menu_id = $1", [menuId])).length, 0);
+});
+
 await test("アプリのクエリが指定している外部キー名が存在する", async () => {
   const rows = await asSuper(
     "select conname from pg_constraint where conname = any($1)",

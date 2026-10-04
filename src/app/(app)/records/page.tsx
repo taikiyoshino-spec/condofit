@@ -27,7 +27,7 @@ export default async function RecordsPage() {
       <PageHeader
         title="記録"
         action={
-          <Link href="/records/new" className="rounded-full bg-accent px-4 py-2 text-sm font-medium text-accent-fg">
+          <Link href="/records/start" className="rounded-full bg-accent px-4 py-2 text-sm font-medium text-accent-fg">
             ＋ 記録する
           </Link>
         }
