@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { requireMember } from "@/lib/auth/session";
 import { listDayComments, listSchedules, listVisits } from "@/lib/schedule/queries";
 import { INTENTION_LABEL, TIME_SLOT_LABEL } from "@/lib/schedule/time-slots";
-import { formatDate, isValidDateString, monthOf, todayJst } from "@/lib/date";
+import { addDays, formatDate, isValidDateString, monthOf, todayJst } from "@/lib/date";
 import { PageHeader, Section } from "@/components/page";
 import { RealtimeRefresh } from "@/components/realtime-refresh";
 import { TimeSlotIcon } from "@/components/time-slot-icon";
@@ -11,6 +11,7 @@ import { CreateSchedule } from "./create-schedule";
 import { ParticipantList } from "@/components/participants";
 import { DayVisitsSection } from "./day-visits";
 import { DayComments } from "./day-comments";
+import { DaySwipe } from "./day-swipe";
 
 export default async function DaySchedulePage({ params }: PageProps<"/schedule/[date]">) {
   const member = await requireMember();
@@ -18,6 +19,8 @@ export default async function DaySchedulePage({ params }: PageProps<"/schedule/[
   if (!isValidDateString(date)) notFound();
   const today = todayJst();
   const isPast = date < today;
+  const prev = addDays(date, -1);
+  const next = addDays(date, 1);
   // 今日と過去の日は「行った人」も出す（未来はまだ記録がない）
   const [schedules, visits, comments] = await Promise.all([
     listSchedules(date, date),
@@ -28,7 +31,21 @@ export default async function DaySchedulePage({ params }: PageProps<"/schedule/[
   return (
     <>
       <RealtimeRefresh tables={["schedules", "schedule_participants", "training_sessions", "day_comments"]} />
-      <PageHeader title={formatDate(date)} back={`/schedule?m=${monthOf(date)}`} />
+      <PageHeader
+        title={formatDate(date)}
+        back={`/schedule?m=${monthOf(date)}`}
+        action={
+          <span className="flex items-center gap-1">
+            <Link href={`/schedule/${prev}`} replace aria-label="前日" className="rounded-full border border-border px-3 py-1 text-sm">
+              ‹ 前日
+            </Link>
+            <Link href={`/schedule/${next}`} replace aria-label="翌日" className="rounded-full border border-border px-3 py-1 text-sm">
+              翌日 ›
+            </Link>
+          </span>
+        }
+      />
+      <DaySwipe prevHref={`/schedule/${prev}`} nextHref={`/schedule/${next}`}>
 
       {visits && <DayVisitsSection visits={visits.get(date)} isToday={date === today} />}
       {comments && <DayComments date={date} comments={comments} myId={member.id} isAdmin={member.role === "admin"} />}
@@ -85,6 +102,8 @@ export default async function DaySchedulePage({ params }: PageProps<"/schedule/[
           <CreateSchedule date={date} />
         </Section>
       )}
+      <p className="px-4 pb-4 pt-2 text-center text-xs text-muted">左右にスライドすると前日・翌日へ移動できます</p>
+      </DaySwipe>
     </>
   );
 }
