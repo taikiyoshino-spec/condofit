@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { formatEntry, type ExerciseType } from "@/lib/records/format";
 import { adjustCount, rowToEntry, type Row } from "@/lib/records/plan";
-import { NumberInput } from "./editor-parts";
+import { CardioInputs, NumberInput } from "./editor-parts";
 
 type Values = Pick<Row, "weight" | "reps" | "duration" | "distance">;
 
@@ -84,8 +84,11 @@ export function PlanRow({
           </div>
         ) : (
           <div className="flex items-center gap-2">
-            <NumberInput label="時間" unit="分" value={adjusting.duration} onChange={(v) => setAdjusting({ ...adjusting, duration: v })} decimal />
-            <NumberInput label="距離" unit="km" value={adjusting.distance} onChange={(v) => setAdjusting({ ...adjusting, distance: v })} decimal />
+            <CardioInputs
+              duration={adjusting.duration}
+              distance={adjusting.distance}
+              onChange={(v) => setAdjusting({ ...adjusting, ...v })}
+            />
           </div>
         )}
         <div className="flex gap-2">

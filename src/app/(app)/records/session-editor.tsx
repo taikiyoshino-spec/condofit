@@ -16,7 +16,7 @@ import {
   type Row,
 } from "@/lib/records/plan";
 import type { Catalog, CatalogExercise, SessionExercise } from "@/lib/records/queries";
-import { ExercisePicker, IconButton, NumberInput } from "./editor-parts";
+import { CardioInputs, ExercisePicker, IconButton, NumberInput } from "./editor-parts";
 import { PlanRow } from "./plan-row";
 
 // 記録の入力。入力のたびにサーバーへ自動保存する（アプリを閉じても入力が消えないように）
@@ -240,6 +240,14 @@ export function SessionEditor({
       TYPING_DELAY_MS,
     );
 
+  /** 複数の値をまとめて変更（有酸素で時間と距離を同時に変えるときなど） */
+  const setFields = (key: number, rowIndex: number, values: Partial<Pick<Row, "duration" | "distance">>) =>
+    update(
+      key,
+      (blk) => ({ ...blk, rows: blk.rows.map((row, k) => (k === rowIndex ? { ...row, ...values } : row)) }),
+      TYPING_DELAY_MS,
+    );
+
   /** メニューの予定セット: できた（値を確定）／やらなかった／予定に戻す。すぐ保存 */
   const setRow = (key: number, rowIndex: number, fn: (row: Row) => Row) =>
     update(key, (blk) => ({ ...blk, rows: blk.rows.map((row, k) => (k === rowIndex ? fn(row) : row)) }));
@@ -365,8 +373,12 @@ export function SessionEditor({
                       </>
                     ) : (
                       <>
-                        <NumberInput label="時間" unit="分" value={r.duration} onChange={(v) => setField(b.key, j, "duration", v)} onBlur={flush} decimal />
-                        <NumberInput label="距離" unit="km" value={r.distance} onChange={(v) => setField(b.key, j, "distance", v)} onBlur={flush} decimal />
+                        <CardioInputs
+                          duration={r.duration}
+                          distance={r.distance}
+                          onChange={(v) => setFields(b.key, j, v)}
+                          onBlur={flush}
+                        />
                       </>
                     )}
                     <IconButton

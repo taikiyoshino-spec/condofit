@@ -8,7 +8,7 @@ import type { Entry } from "@/lib/records/format";
 import { asManualRow, EMPTY_ROW, entryToRow, rowToEntry, type Block } from "@/lib/records/plan";
 import type { Catalog, CatalogExercise } from "@/lib/records/queries";
 import type { Menu } from "@/lib/menus/queries";
-import { ExercisePicker, IconButton, NumberInput } from "../editor-parts";
+import { CardioInputs, ExercisePicker, IconButton, NumberInput } from "../editor-parts";
 
 let nextKey = 1;
 
@@ -123,8 +123,13 @@ export function MenuEditor({
                     </>
                   ) : (
                     <>
-                      <NumberInput label="時間" unit="分" value={r.duration} onChange={(v) => setField(b.key, j, "duration", v)} decimal />
-                      <NumberInput label="距離" unit="km" value={r.distance} onChange={(v) => setField(b.key, j, "distance", v)} decimal />
+                      <CardioInputs
+                        duration={r.duration}
+                        distance={r.distance}
+                        onChange={(v) =>
+                          update(b.key, (blk) => ({ ...blk, rows: blk.rows.map((row, k) => (k === j ? { ...row, ...v } : row)) }))
+                        }
+                      />
                     </>
                   )}
                   <IconButton
