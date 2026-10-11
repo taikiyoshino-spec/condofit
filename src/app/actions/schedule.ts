@@ -1,6 +1,9 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
+import { pushScheduleNotifications } from "@/lib/push-notifications";
+import type { Member } from "@/lib/auth/session";
 import { requireMember } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { isValidDateString, todayJst } from "@/lib/date";
@@ -14,6 +17,11 @@ function dbError(message: string): string {
   if (message.includes("past_schedule")) return "過去の予定は変更できません";
   if (message.includes("schedule_deleted")) return "この予定は削除されています";
   return "保存できませんでした。もう一度お試しください";
+}
+
+/** DBトリガーが作ったアプリ内通知と同じ相手・内容で、レスポンス後にプッシュを送る */
+function schedulePush(member: Member, scheduleId: string, since: Date) {
+  after(() => pushScheduleNotifications(member.id, member.displayName, scheduleId, since));
 }
 
 function revalidate() {
@@ -39,6 +47,7 @@ export async function createScheduleAction(date: string, timeSlot: string): Prom
 
 export async function updateScheduleAction(id: string, date: string, timeSlot: string): Promise<ActionResult> {
   const member = await requireMember();
+  const since = new Date();
   if (!isValidDateString(date) || !isTimeSlot(timeSlot)) return { ok: false, error: "日付と時間帯を選んでください" };
   if (date < todayJst()) return { ok: false, error: "今日以降の日付を選んでください" };
 
@@ -52,11 +61,13 @@ export async function updateScheduleAction(id: string, date: string, timeSlot: s
   if (error) return { ok: false, error: dbError(error.message) };
   if (!data.length) return { ok: false, error: "予定を作成した人だけが編集できます" };
   revalidate();
+  schedulePush(member, id, since);
   return { ok: true, id };
 }
 
 export async function deleteScheduleAction(id: string): Promise<ActionResult> {
   const member = await requireMember();
+  const since = new Date();
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("schedules")
@@ -68,12 +79,14 @@ export async function deleteScheduleAction(id: string): Promise<ActionResult> {
   if (error) return { ok: false, error: dbError(error.message) };
   if (!data.length) return { ok: false, error: "予定を作成した人だけが削除できます" };
   revalidate();
+  schedulePush(member, id, since);
   return { ok: true };
 }
 
 /** 参加意思の設定。null は未回答に戻す（参加キャンセル） */
 export async function setIntentionAction(scheduleId: string, intention: Intention | null): Promise<ActionResult> {
   const member = await requireMember();
+  const since = new Date();
   const supabase = await createClient();
 
   if (intention === null) {
@@ -103,5 +116,6 @@ export async function setIntentionAction(scheduleId: string, intention: Intentio
     return { ok: false, error: "不正な値です" };
   }
   revalidate();
+  schedulePush(member, scheduleId, since);
   return { ok: true };
 }

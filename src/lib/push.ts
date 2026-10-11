@@ -3,7 +3,7 @@ import webpush from "web-push";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export type PushMessage = { title: string; body: string; url?: string; tag?: string };
-type Category = "check_in" | "location_stale" | "comment";
+type Category = "check_in" | "location_stale" | "comment" | "schedule";
 
 let configured: boolean | null = null;
 function configure() {
@@ -29,7 +29,7 @@ export async function sendPush(userIds: string[], category: Category, message: P
 
   const { data: settings } = await admin
     .from("notification_settings")
-    .select("user_id, check_in, location_stale, comment, users!inner(deactivated_at)")
+    .select("user_id, check_in, location_stale, comment, schedule, users!inner(deactivated_at)")
     .in("user_id", userIds)
     .is("users.deactivated_at", null);
   const enabled = (settings ?? []).filter((s) => s[category]).map((s) => s.user_id as string);
