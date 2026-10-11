@@ -543,6 +543,37 @@ await test("トレーニングメニュー: 自分専用で保存・更新・削
   assert.equal((await asSuper("select * from workout_menu_items where menu_id = $1", [menuId])).length, 0);
 });
 
+await test("自分専用の種目: 本人だけ見える・ランキングと最近の活動に出さない・マスタは作れない", async () => {
+  const [{ id: mine }] = await as("C", "insert into exercises (name, type, owner_user_id) values ('ケトルベルスイング', 'weight', $1) returning id", [ids.C]);
+  assert.equal((await as("C", "select * from exercises where id = $1", [mine])).length, 1);
+  assert.equal((await as("B", "select * from exercises where id = $1", [mine])).length, 0, "他の人には見えない");
+  assert.equal((await as("A", "select * from exercises where id = $1", [mine])).length, 0, "管理者にも見えない");
+
+  // なりすまし・部位付き・マスタの作成は不可
+  await rejects(() => as("C", "insert into exercises (name, type, owner_user_id) values ('x', 'weight', $1)", [ids.B]), /row-level security/);
+  const [{ id: part }] = await asSuper("select id from body_parts limit 1");
+  await rejects(() => as("C", "insert into exercises (name, type, owner_user_id, body_part_id) values ('y', 'weight', $1, $2)", [ids.C, part]), /row-level security/);
+  await rejects(() => as("C", "insert into exercises (name, type, body_part_id) values ('z', 'weight', $1)", [part]), /row-level security/);
+  await rejects(() => as("C", "insert into exercises (name, type) values ('部位なしマスタ', 'weight')"), /row-level security|exercises_part_or_owner/);
+  // 同じ人が同じ名前を二重に作れない（別の人なら作れる）
+  await rejects(() => as("C", "insert into exercises (name, type, owner_user_id) values ('ケトルベルスイング', 'weight', $1)", [ids.C]), /duplicate key/);
+  await as("B", "insert into exercises (name, type, owner_user_id) values ('ケトルベルスイング', 'cardio', $1)", [ids.B]);
+  // 管理者も他人の種目は変更できない
+  assert.equal((await as("A", "update exercises set name = 'x' where id = $1 returning id", [mine])).length, 0);
+
+  // C が今月その種目だけで記録 → ランキングの種目数・最近の活動の種目名に出ない
+  const before = Object.fromEntries((await as("A", "select * from monthly_ranking(jst_today())")).map((r) => [r.display_name, r]));
+  await as("C", "select save_training_session(null, now(), $1::jsonb)", [JSON.stringify([{ exercise_id: mine, entries: [{ weight_kg: 16, reps: 15 }] }])]);
+  const after = Object.fromEntries((await as("A", "select * from monthly_ranking(jst_today())")).map((r) => [r.display_name, r]));
+  assert.equal(after["Cさん"].visits, before["Cさん"].visits + 1, "Fit訪問回数には入る");
+  assert.equal(after["Cさん"].exercise_kinds, before["Cさん"].exercise_kinds, "種目の数には入らない");
+  const activity = await as("A", "select * from recent_activity()");
+  assert.ok(!JSON.stringify(activity).includes("ケトルベル"), "最近の活動に名前が出ない");
+  // 本人の記録としては普通に見える
+  const own = await as("C", "select ex.name from session_exercises se join exercises ex on ex.id = se.exercise_id where se.exercise_id = $1", [mine]);
+  assert.equal(own[0].name, "ケトルベルスイング");
+});
+
 await test("アプリのクエリが指定している外部キー名が存在する", async () => {
   const rows = await asSuper(
     "select conname from pg_constraint where conname = any($1)",

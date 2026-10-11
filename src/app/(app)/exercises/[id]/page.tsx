@@ -22,9 +22,9 @@ export default async function ExerciseDetailPage({ params }: PageProps<"/exercis
   return (
     <>
       <RealtimeRefresh tables={["training_sessions"]} />
-      <PageHeader title={exercise.name} back={`/exercises/p/${exercise.bodyPartId}`} />
+      <PageHeader title={exercise.name} back={exercise.bodyPartId ? `/exercises/p/${exercise.bodyPartId}` : "/records/progress"} />
       <p className="px-4 pb-3 text-xs text-muted">
-        {exercise.bodyPartName}・{exercise.type === "weight" ? "重量系" : "有酸素"}
+        {exercise.custom ? "自分の種目（ほかのメンバーには見えません）" : exercise.bodyPartName}・{exercise.type === "weight" ? "重量系" : "有酸素"}
         {!exercise.active && "（現在は非表示の種目です）"}
       </p>
 

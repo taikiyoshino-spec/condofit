@@ -6,7 +6,7 @@ export default async function ExercisesPage() {
   await requireMember();
   const [parts, exercises] = await Promise.all([listBodyParts(), listExercises()]);
   const counts = new Map<string, number>();
-  for (const e of exercises) counts.set(e.bodyPartId, (counts.get(e.bodyPartId) ?? 0) + 1);
+  for (const e of exercises) if (e.bodyPartId) counts.set(e.bodyPartId, (counts.get(e.bodyPartId) ?? 0) + 1);
 
   return (
     <>

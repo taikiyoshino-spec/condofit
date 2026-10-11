@@ -1,9 +1,10 @@
 "use client";
 
 // 記録入力・メニュー作成で共通の部品（数値入力、アイコンボタン、種目の選択シート）
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { BottomSheet } from "@/components/bottom-sheet";
 import type { Catalog, CatalogExercise } from "@/lib/records/queries";
+import { createCustomExerciseAction } from "@/app/actions/custom-exercises";
 import { distanceFrom, SPEED_PRESETS, SPEED_STEP, speedFrom, stepSpeed } from "@/lib/records/speed";
 
 export function NumberInput({
@@ -62,7 +63,11 @@ export function ExercisePicker({
   onPick: (ex: CatalogExercise) => void;
 }) {
   const [partId, setPartId] = useState<string | null>(null);
-  const byId = useMemo(() => new Map(catalog.exercises.map((e) => [e.id, e])), [catalog.exercises]);
+  // この画面で新しく作った自分の種目（再読み込みまでの間も一覧に出す）
+  const [created, setCreated] = useState<CatalogExercise[]>([]);
+  const all = useMemo(() => [...catalog.exercises, ...created.filter((c) => !catalog.exercises.some((e) => e.id === c.id))], [catalog.exercises, created]);
+  const byId = useMemo(() => new Map(all.map((e) => [e.id, e])), [all]);
+  const customs = all.filter((e) => e.custom);
   // 非表示にされた種目は最近使った一覧にも出さない
   const recent = recentExerciseIds.map((id) => byId.get(id)).filter((e): e is CatalogExercise => Boolean(e)).slice(0, 8);
   const partExercises = partId ? catalog.exercises.filter((e) => e.bodyPartId === partId) : [];
@@ -92,6 +97,12 @@ export function ExercisePicker({
               <ExerciseList items={recent} onPick={onPick} />
             </div>
           )}
+          {customs.length > 0 && (
+            <div className="mb-4">
+              <h3 className="mb-2 text-sm font-medium text-muted">自分の種目</h3>
+              <ExerciseList items={customs} onPick={onPick} />
+            </div>
+          )}
           <h3 className="mb-2 text-sm font-medium text-muted">部位から選ぶ</h3>
           <div className="grid grid-cols-2 gap-2">
             {catalog.bodyParts.map((p) => (
@@ -100,9 +111,93 @@ export function ExercisePicker({
               </button>
             ))}
           </div>
+          <CustomExerciseForm
+            onCreated={(ex) => {
+              if (ex.custom) setCreated((list) => (list.some((e) => e.id === ex.id) ? list : [...list, ex]));
+              onPick(ex);
+            }}
+          />
         </>
       )}
     </BottomSheet>
+  );
+}
+
+/** 一覧にない種目を自分で名前を付けて追加（自分専用。ほかのメンバーには見えない） */
+function CustomExerciseForm({ onCreated }: { onCreated: (ex: CatalogExercise) => void }) {
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [type, setType] = useState<"weight" | "cardio">("weight");
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="mt-4 w-full rounded-lg border border-dashed border-border py-3 text-sm font-medium text-accent"
+      >
+        ＋ 一覧にない種目を自由に入力
+      </button>
+    );
+  }
+
+  const submit = () =>
+    startTransition(async () => {
+      setError(null);
+      const result = await createCustomExerciseAction(name, type);
+      if (!result.ok) return setError(result.error);
+      setName("");
+      setOpen(false);
+      onCreated(result.exercise);
+    });
+
+  return (
+    <div className="mt-4 space-y-2 rounded-lg border border-border p-3">
+      <input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        maxLength={40}
+        placeholder="種目名（例：ケトルベルスイング）"
+        aria-label="種目名"
+        className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-base"
+      />
+      <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="種目のタイプ">
+        {(
+          [
+            ["weight", "重量系（kg×回）"],
+            ["cardio", "有酸素（分・km）"],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            role="radio"
+            aria-checked={type === value}
+            onClick={() => setType(value)}
+            className={`rounded-lg py-2 text-sm ${type === value ? "border-2 border-accent font-medium" : "border border-border"}`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      <p className="text-xs text-muted">自分専用の種目です。ほかのメンバーには見えず、ランキングにも数えません。</p>
+      {error && <p className="text-sm text-danger">{error}</p>}
+      <div className="flex gap-2">
+        <button type="button" onClick={() => setOpen(false)} className="flex-1 rounded-lg border border-border py-2 text-sm">
+          やめる
+        </button>
+        <button
+          type="button"
+          disabled={pending || !name.trim()}
+          onClick={submit}
+          className="flex-1 rounded-lg bg-accent py-2 text-sm font-medium text-accent-fg disabled:opacity-50"
+        >
+          {pending ? "追加中…" : "追加する"}
+        </button>
+      </div>
+    </div>
   );
 }
 

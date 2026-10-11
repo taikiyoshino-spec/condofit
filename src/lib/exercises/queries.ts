@@ -9,7 +9,9 @@ export type Exercise = {
   id: string;
   name: string;
   type: ExerciseType;
-  bodyPartId: string;
+  /** 自分専用の種目は null */
+  bodyPartId: string | null;
+  custom: boolean;
   bodyPartName: string;
   displayOrder: number;
   active: boolean;
@@ -19,7 +21,8 @@ type ExerciseRow = {
   id: string;
   name: string;
   type: ExerciseType;
-  body_part_id: string;
+  body_part_id: string | null;
+  owner_user_id: string | null;
   display_order: number;
   active: boolean;
   body_parts: { name: string } | null;
@@ -30,12 +33,13 @@ const toExercise = (r: ExerciseRow): Exercise => ({
   name: r.name,
   type: r.type,
   bodyPartId: r.body_part_id,
+  custom: r.owner_user_id !== null,
   bodyPartName: r.body_parts?.name ?? "",
   displayOrder: r.display_order,
   active: r.active,
 });
 
-const EXERCISE_SELECT = "id, name, type, body_part_id, display_order, active, body_parts(name)";
+const EXERCISE_SELECT = "id, name, type, body_part_id, owner_user_id, display_order, active, body_parts(name)";
 
 /** 部位（管理画面では非表示も含める） */
 export async function listBodyParts({ includeHidden = false } = {}): Promise<BodyPart[]> {
@@ -54,7 +58,8 @@ export async function listBodyParts({ includeHidden = false } = {}): Promise<Bod
 
 export async function listExercises({ includeHidden = false, bodyPartId }: { includeHidden?: boolean; bodyPartId?: string } = {}) {
   const supabase = await createClient();
-  let query = supabase.from("exercises").select(EXERCISE_SELECT).order("display_order").order("name");
+  // 種目タブ・管理画面ではマスタの種目だけ（自分専用の種目は出さない）
+  let query = supabase.from("exercises").select(EXERCISE_SELECT).is("owner_user_id", null).order("display_order").order("name");
   if (!includeHidden) query = query.eq("active", true);
   if (bodyPartId) query = query.eq("body_part_id", bodyPartId);
   const { data, error } = await query;

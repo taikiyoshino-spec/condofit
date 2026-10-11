@@ -165,7 +165,7 @@ function ExerciseRow({ exercise, parts, isFirst, isLast }: RowProps) {
       <li className="py-2">
         <ExerciseForm
           parts={parts}
-          initial={{ name: exercise.name, bodyPartId: exercise.bodyPartId, type: exercise.type }}
+          initial={{ name: exercise.name, bodyPartId: exercise.bodyPartId ?? "", type: exercise.type }}
           submitLabel="保存"
           typeNote="種目タイプを変えると、過去の記録の表示が変わることがあります"
           onCancel={() => setEditing(false)}
@@ -197,14 +197,14 @@ function ExerciseRow({ exercise, parts, isFirst, isLast }: RowProps) {
       <SmallButton
         aria-label="上へ"
         disabled={pending || isFirst}
-        onClick={() => run(() => moveExerciseAction(exercise.id, exercise.bodyPartId, -1))}
+        onClick={() => run(() => moveExerciseAction(exercise.id, exercise.bodyPartId ?? "", -1))}
       >
         ↑
       </SmallButton>
       <SmallButton
         aria-label="下へ"
         disabled={pending || isLast}
-        onClick={() => run(() => moveExerciseAction(exercise.id, exercise.bodyPartId, 1))}
+        onClick={() => run(() => moveExerciseAction(exercise.id, exercise.bodyPartId ?? "", 1))}
       >
         ↓
       </SmallButton>

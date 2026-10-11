@@ -44,18 +44,20 @@ export async function getMonthlyExercisesByUser(month: string): Promise<Record<s
   const end = new Date(`${m === 12 ? y + 1 : y}-${String(m === 12 ? 1 : m + 1).padStart(2, "0")}-01T00:00:00+09:00`);
   const { data, error } = await supabase
     .from("training_sessions")
-    .select("user_id, session_exercises(exercise_id, exercises(name))")
+    .select("user_id, session_exercises(exercise_id, exercises(name, owner_user_id))")
     .gte("performed_at", start.toISOString())
     .lt("performed_at", end.toISOString());
   if (error) throw error;
 
-  type Row = { user_id: string; session_exercises: { exercise_id: string; exercises: { name: string } | null }[] };
+  type Row = { user_id: string; session_exercises: { exercise_id: string; exercises: { name: string; owner_user_id: string | null } | null }[] };
   const byUser = new Map<string, Map<string, MemberExercise>>();
   for (const s of data as unknown as Row[]) {
     const mine = byUser.get(s.user_id) ?? new Map<string, MemberExercise>();
     // 同じセッション内で同じ種目を複数回登録していても1回と数える
     const seen = new Set<string>();
     for (const se of s.session_exercises) {
+      // 自分専用の種目（他の人には見えない・本人のものも数えない）は内訳に出さない
+      if (!se.exercises || se.exercises.owner_user_id !== null) continue;
       if (seen.has(se.exercise_id)) continue;
       seen.add(se.exercise_id);
       const cur = mine.get(se.exercise_id) ?? { exerciseId: se.exercise_id, name: se.exercises?.name ?? "", count: 0 };
