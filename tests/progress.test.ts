@@ -53,7 +53,7 @@ test("グラフ用の点: 古い順、値のない日は除く、最高記録に
     "maxWeight",
   );
   assert.deepEqual(s.map((p) => p.date), ["2026-09-01", "2026-09-15", "2026-09-22"]);
-  assert.deepEqual(s.map((p) => p.isBest), [false, true, false], "同値なら最初に到達した日");
+  assert.deepEqual(s.map((p) => p.isBest), [false, false, true], "同じ重さなら回数が多い日（55kg×6回）が最高");
   assert.equal(s[1].repsAtMax, 5);
 });
 
@@ -86,7 +86,8 @@ test("最近の成長の要約: 重量系は最大重量、前回との差、自
     { date: "2026-09-15", entries: [w(60, 5)] },
   ])!;
   assert.equal(s.metric, "maxWeight");
-  assert.deepEqual(s.series, [50, 55, 60]);
+  assert.equal(s.seriesLabel, "推定MAXの推移");
+  assert.deepEqual(s.series, [63.3, 64.2, 70], "線は推定MAX（50×8, 55×5, 60×5）");
   assert.equal(s.latest, 60);
   assert.equal(s.latestReps, 5);
   assert.equal(s.delta, 5);
@@ -111,7 +112,45 @@ test("最近の成長の要約: 有酸素は時間、時間がなければ距離
 });
 
 test("差の表示", () => {
-  assert.equal(formatDelta("maxWeight", 2.5), "+2.5kg");
-  assert.equal(formatDelta("duration", -5), "−5分");
-  assert.equal(formatDelta("maxWeight", 0), "±0kg");
+  assert.equal(formatDelta("kg", 2.5), "+2.5kg");
+  assert.equal(formatDelta("分", -5), "−5分");
+  assert.equal(formatDelta("kg", 0), "±0kg");
+  assert.equal(formatDelta("回", 1), "+1回");
+});
+
+test("同じ重さで回数が増えたら: 線は推定MAXで上がり、前回比は回数、自己ベスト扱い", () => {
+  const s = summarizeProgress("weight", [
+    { date: "2026-09-01", entries: [w(60, 5)] },
+    { date: "2026-09-08", entries: [w(60, 6)] },
+  ])!;
+  assert.equal(s.seriesLabel, "推定MAXの推移");
+  assert.deepEqual(s.series, [70, 72]);
+  assert.equal(s.latest, 60);
+  assert.equal(s.latestReps, 6);
+  assert.equal(s.delta, 1);
+  assert.equal(s.deltaUnit, "回");
+  assert.equal(s.isBest, true);
+
+  const same = summarizeProgress("weight", [
+    { date: "2026-09-01", entries: [w(60, 6)] },
+    { date: "2026-09-08", entries: [w(60, 6)] },
+  ])!;
+  assert.equal(same.isBest, false, "同じ重さ・同じ回数は更新ではない");
+  assert.equal(same.delta, 0);
+});
+
+test("自己ベスト判定: 最大重量が同じでも回数が増えれば更新", () => {
+  const pbs = detectPersonalBests("weight", [w(60, 6)], [[w(60, 5)], [w(55, 10)]]);
+  assert.ok(pbs.some((p) => p.metric === "maxWeight" && p.value === 60 && p.repsAtMax === 6));
+  assert.ok(!detectPersonalBests("weight", [w(60, 5)], [[w(60, 5)]]).some((p) => p.metric === "maxWeight"));
+  assert.ok(!detectPersonalBests("weight", [w(57.5, 12)], [[w(60, 5)]]).some((p) => p.metric === "maxWeight"), "重さが下がれば回数が多くても最大重量の更新ではない");
+});
+
+test("グラフの★: 最大重量は同じ重さなら回数が多い日", () => {
+  const s = progressSeries([
+    { date: "2026-09-01", entries: [w(60, 5)] },
+    { date: "2026-09-08", entries: [w(60, 7)] },
+    { date: "2026-09-15", entries: [w(60, 6)] },
+  ], "maxWeight");
+  assert.deepEqual(s.map((p) => p.isBest), [false, true, false]);
 });

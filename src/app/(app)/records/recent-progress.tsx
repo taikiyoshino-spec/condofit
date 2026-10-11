@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { RecentProgress } from "@/lib/records/queries";
-import { formatDelta, formatMetric, METRIC_INFO } from "@/lib/records/progress";
+import { formatDelta, formatMetric } from "@/lib/records/progress";
 
 // 記録タブの「最近の成長」。種目ごとの小さな推移グラフと最新値・前回との差。タップでその種目の詳細へ
 
@@ -66,13 +66,13 @@ export function RecentProgressList({ items, title = "最近の成長", moreHref 
                 <span className="line-clamp-2 block text-sm font-medium [word-break:keep-all]">
                   <ExerciseName name={name} />
                 </span>
-                <span className="block text-xs text-muted">{METRIC_INFO[s.metric].label}</span>
+                <span className="block text-xs text-muted">{s.seriesLabel}</span>
               </span>
               <Sparkline values={s.series} />
               <span className="w-24 shrink-0 text-right">
                 <span className="block text-sm font-semibold">{formatMetric(s.metric, s.latest, s.latestReps)}</span>
                 <span className={`block text-xs ${s.isBest || (s.delta ?? 0) > 0 ? "text-accent" : "text-muted"}`}>
-                  {s.isBest ? "★ 自己ベスト" : s.delta === null ? "初記録" : `前回比 ${formatDelta(s.metric, s.delta)}`}
+                  {s.isBest ? "★ 自己ベスト" : s.delta === null ? "初記録" : `前回比 ${formatDelta(s.deltaUnit, s.delta)}`}
                 </span>
               </span>
             </Link>

@@ -79,9 +79,19 @@ export function progressSeries(sessions: { date: string; entries: Entry[] }[], m
     .filter((p): p is { date: string; value: number; repsAtMax: number | null } => p.value !== null);
   let bestIndex = -1;
   points.forEach((p, i) => {
-    if (bestIndex < 0 || p.value > points[bestIndex].value) bestIndex = i;
+    if (bestIndex < 0 || beats(metric, p, points[bestIndex])) bestIndex = i;
   });
   return points.map((p, i) => ({ ...p, isBest: i === bestIndex }));
+}
+
+/** a が b より良い記録か。最大重量は「重さが同じなら回数が多い方」が上（同じ重さで回数が増えても成長として扱う） */
+function beats(
+  metric: ProgressMetric,
+  a: { value: number; repsAtMax: number | null },
+  b: { value: number; repsAtMax: number | null },
+) {
+  if (a.value !== b.value) return a.value > b.value;
+  return metric === "maxWeight" && (a.repsAtMax ?? -1) > (b.repsAtMax ?? -1);
 }
 
 export type PersonalBest = { metric: ProgressMetric; value: number; previous: number; repsAtMax: number | null };
@@ -97,10 +107,13 @@ export function detectPersonalBests(type: ExerciseType, current: Entry[], others
   const result: PersonalBest[] = [];
   for (const metric of targets) {
     const value = metricValue(now, metric);
-    const previous = past.map((m) => metricValue(m, metric)).filter((v): v is number => v !== null);
+    const reps = metric === "maxWeight" ? now.repsAtMax : null;
+    const previous = past
+      .map((m) => ({ value: metricValue(m, metric), repsAtMax: metric === "maxWeight" ? m.repsAtMax : null }))
+      .filter((v): v is { value: number; repsAtMax: number | null } => v.value !== null);
     if (value === null || previous.length === 0) continue;
-    const best = Math.max(...previous);
-    if (value > best) result.push({ metric, value, previous: best, repsAtMax: metric === "maxWeight" ? now.repsAtMax : null });
+    const best = previous.reduce((x, y) => (beats(metric, y, x) ? y : x));
+    if (beats(metric, { value, repsAtMax: reps }, best)) result.push({ metric, value, previous: best.value, repsAtMax: reps });
   }
   return result;
 }
@@ -115,18 +128,43 @@ export function formatMetric(metric: ProgressMetric, value: number, repsAtMax: n
 }
 
 export type ExerciseProgressSummary = {
-  metric: ProgressMetric;
+  metric: ProgressMetric; // 右側に出す値（重量系は最大重量）
+  seriesLabel: string; // 線が何の推移か
   series: number[]; // 古い順（スパークライン用、最大12点）
   latest: number;
   latestReps: number | null;
   delta: number | null; // 前回との差（前回がなければ null）
+  deltaUnit: string; // 差の単位（重量系で重さが同じなら「回」）
   isBest: boolean; // 最新が自己ベスト更新（2回目以降のみ）
 };
 
-/** 記録タブの「最近の成長」用の要約。重量系は最大重量、有酸素は時間（なければ距離） */
+/**
+ * 記録タブの「最近の成長」用の要約。
+ * 重量系: 右側は最大重量×回数、線は推定MAX（同じ重さでも回数が増えれば上がる）。前回比は重さが同じなら回数の差
+ * 有酸素: 時間（なければ距離）
+ */
 export function summarizeProgress(type: ExerciseType, sessions: { date: string; entries: Entry[] }[]): ExerciseProgressSummary | null {
-  const candidates: ProgressMetric[] = type === "weight" ? ["maxWeight"] : ["duration", "distance"];
-  for (const metric of candidates) {
+  if (type === "weight") {
+    const points = progressSeries(sessions, "maxWeight");
+    if (points.length === 0) return null;
+    const e1rm = progressSeries(sessions, "e1rm");
+    const last = points[points.length - 1];
+    const prev = points.length > 1 ? points[points.length - 2] : null;
+    const earlier = points.slice(0, -1);
+    const weightDiff = prev ? round(last.value - prev.value, 2) : 0;
+    const sameWeight = prev !== null && weightDiff === 0;
+    return {
+      metric: "maxWeight",
+      seriesLabel: e1rm.length > 0 ? "推定MAXの推移" : "最大重量の推移",
+      series: (e1rm.length > 0 ? e1rm : points).slice(-12).map((p) => p.value),
+      latest: last.value,
+      latestReps: last.repsAtMax,
+      delta: prev === null ? null : sameWeight ? (last.repsAtMax ?? 0) - (prev.repsAtMax ?? 0) : weightDiff,
+      deltaUnit: sameWeight ? "回" : "kg",
+      isBest: earlier.length > 0 && earlier.every((p) => beats("maxWeight", last, p)),
+    };
+  }
+  for (const metric of ["duration", "distance"] as const) {
     const points = progressSeries(sessions, metric);
     if (points.length === 0) continue;
     const last = points[points.length - 1];
@@ -134,19 +172,20 @@ export function summarizeProgress(type: ExerciseType, sessions: { date: string; 
     const prevBest = points.length > 1 ? Math.max(...points.slice(0, -1).map((p) => p.value)) : null;
     return {
       metric,
+      seriesLabel: `${METRIC_INFO[metric].label}の推移`,
       series: points.slice(-12).map((p) => p.value),
       latest: last.value,
-      latestReps: last.repsAtMax,
+      latestReps: null,
       delta: prev ? round(last.value - prev.value, 2) : null,
+      deltaUnit: METRIC_INFO[metric].unit,
       isBest: prevBest !== null && last.value > prevBest,
     };
   }
   return null;
 }
 
-/** 「+2.5kg」「-5分」「±0kg」 */
-export function formatDelta(metric: ProgressMetric, delta: number): string {
-  const { unit } = METRIC_INFO[metric];
+/** 「+2.5kg」「+1回」「−5分」「±0kg」 */
+export function formatDelta(unit: string, delta: number): string {
   if (delta === 0) return `±0${unit}`;
   return `${delta > 0 ? "+" : "−"}${fmt(Math.abs(delta))}${unit}`;
 }
