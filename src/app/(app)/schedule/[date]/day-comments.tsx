@@ -108,7 +108,7 @@ export function DayComments({
             {pending ? "送信中…" : "コメントする"}
           </button>
         </div>
-        <p className="text-xs text-muted">メンバー全員が見られます。この日にFitに行った人とコメントした人に通知されます。</p>
+        <p className="text-xs text-muted">メンバー全員が見られます。書くとメンバー全員に通知されます（通知設定でオフにできます）。</p>
       </div>
     </section>
   );

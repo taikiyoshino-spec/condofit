@@ -447,7 +447,7 @@ await test("総合ランキング: 今月の訪問回数と種目数、記録0�
   await rejects(() => asAnon("select * from monthly_ranking(jst_today())"), /permission denied/);
 });
 
-await test("実績コメント: 今日以前のみ、行った人と既存コメント者に通知、本人には通知しない", async () => {
+await test("実績コメント: 今日以前のみ、本人以外に通知", async () => {
   await clearNotifs();
   // B・C は今日トレーニング記録がある
   const [{ id: c1 }] = await as("A", "insert into day_comments (date, body) values (jst_today(), '  今日は混んでた  ') returning id, body");
@@ -470,6 +470,29 @@ await test("実績コメント: 今日以前のみ、行った人と既存コメ
   await rejects(() => as("D", "insert into day_comments (date, body) values (jst_today(), 'x')"), /row-level security/);
   assert.equal((await as("D", "select * from day_comments")).length, 0);
   assert.equal((await as("C", "select * from day_comments")).length, 2);
+});
+
+await test("実績コメント: 通知は全員（本人以外・グループ外は除く）、コメント通知をオフにした人には届かない", async () => {
+  await clearNotifs();
+  // 昨日は誰もトレーニング記録がない日。それでも全員に届く
+  await as("A", "insert into day_comments (date, body) values (jst_today() - 1, '昨日のこと')");
+  assert.deepEqual((await notifs("B")).map((n) => n.type), ["day_comment"]);
+  assert.deepEqual((await notifs("C")).map((n) => n.type), ["day_comment"]);
+  assert.equal((await notifs("A")).length, 0);
+  assert.equal((await notifs("D")).length, 0, "グループ外には届かない");
+  await clearNotifs();
+
+  await as("C", "update notification_settings set comment = false where user_id = $1", [ids.C]);
+  await as("B", "insert into day_comments (date, body) values (jst_today() - 1, 'オフ確認')");
+  assert.equal((await notifs("C")).length, 0, "コメント通知オフ");
+  assert.deepEqual((await notifs("A")).map((n) => n.type), ["day_comment"]);
+  await as("C", "update notification_settings set comment = true where user_id = $1", [ids.C]);
+  // 予定の通知設定とは独立している
+  const [{ schedule, comment }] = await asSuper("select schedule, comment from notification_settings where user_id = $1", [ids.C]);
+  assert.equal(schedule, true);
+  assert.equal(comment, true);
+  await asSuper("delete from day_comments where date = jst_today() - 1");
+  await clearNotifs();
 });
 
 await test("実績コメント: 削除は本人と管理者だけ", async () => {
