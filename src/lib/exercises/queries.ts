@@ -2,6 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { jstDateOf, sessionRepresentative, type Entry, type ExerciseType } from "@/lib/records/format";
 import { monthOf, todayJst } from "@/lib/date";
+import { countVisits } from "@/lib/records/visits";
 import { assignRanks, byDesc, type Ranked } from "@/lib/ranking";
 
 export type BodyPart = { id: string; name: string; displayOrder: number; active: boolean };
@@ -148,7 +149,8 @@ export async function getMyActivitySummary(userId: string): Promise<ActivitySumm
     session_exercises: { exercise_id: string; exercises: { name: string; type: ExerciseType } | null }[];
   };
   const thisMonth = monthOf(todayJst());
-  const stats = () => ({ visits: 0, days: new Set<string>(), kinds: new Set<string>() });
+  // Fit訪問は「同じ日で3時間以内の記録は同じ来店」として数える（DBの集計と同じ規則）
+  const stats = () => ({ starts: [] as string[], days: new Set<string>(), kinds: new Set<string>() });
   const month = stats();
   const total = stats();
   const byExercise = new Map<string, ActivitySummary["byExercise"][number]>();
@@ -158,7 +160,7 @@ export async function getMyActivitySummary(userId: string): Promise<ActivitySumm
     const targets = monthOf(date) === thisMonth ? [total, month] : [total];
     const ids = new Set(s.session_exercises.map((se) => se.exercise_id));
     for (const t of targets) {
-      t.visits++;
+      t.starts.push(s.performed_at);
       t.days.add(date);
       ids.forEach((id) => t.kinds.add(id));
     }
@@ -179,7 +181,7 @@ export async function getMyActivitySummary(userId: string): Promise<ActivitySumm
     }
   }
 
-  const fin = (t: ReturnType<typeof stats>) => ({ visits: t.visits, trainingDays: t.days.size, exerciseKinds: t.kinds.size });
+  const fin = (t: ReturnType<typeof stats>) => ({ visits: countVisits(t.starts), trainingDays: t.days.size, exerciseKinds: t.kinds.size });
   return {
     month: fin(month),
     total: fin(total),

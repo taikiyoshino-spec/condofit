@@ -35,7 +35,7 @@ export default async function ActivityPage() {
             ))}
           </tbody>
         </table>
-        <p className="mt-2 text-xs text-muted">Fit訪問はトレーニング記録の数です（チェックインは数えません）。</p>
+        <p className="mt-2 text-xs text-muted">Fit訪問はトレーニング記録から数えます。同じ日に3時間以内に付けた記録は1回の来店として数えます（チェックインは数えません）。</p>
       </Section>
 
       <Section title="種目別">

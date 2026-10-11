@@ -565,13 +565,33 @@ await test("自分専用の種目: 本人だけ見える・ランキングと最
   const before = Object.fromEntries((await as("A", "select * from monthly_ranking(jst_today())")).map((r) => [r.display_name, r]));
   await as("C", "select save_training_session(null, now(), $1::jsonb)", [JSON.stringify([{ exercise_id: mine, entries: [{ weight_kg: 16, reps: 15 }] }])]);
   const after = Object.fromEntries((await as("A", "select * from monthly_ranking(jst_today())")).map((r) => [r.display_name, r]));
-  assert.equal(after["Cさん"].visits, before["Cさん"].visits + 1, "Fit訪問回数には入る");
+  // C はこの日すでに記録があり3時間以内なので、Fit訪問回数は同じ来店として数える（回数は減らない）
+  assert.ok(after["Cさん"].visits >= before["Cさん"].visits, "Fit訪問回数は減らない");
   assert.equal(after["Cさん"].exercise_kinds, before["Cさん"].exercise_kinds, "種目の数には入らない");
   const activity = await as("A", "select * from recent_activity()");
   assert.ok(!JSON.stringify(activity).includes("ケトルベル"), "最近の活動に名前が出ない");
   // 本人の記録としては普通に見える
   const own = await as("C", "select ex.name from session_exercises se join exercises ex on ex.id = se.exercise_id where se.exercise_id = $1", [mine]);
   assert.equal(own[0].name, "ケトルベルスイング");
+});
+
+await test("Fit訪問回数: 同じ日で3時間以内の記録は1回、3時間以上あけば別の来店", async () => {
+  const visits = async (who) =>
+    (await as("A", "select display_name, visits from monthly_ranking(jst_today())")).find((r) => r.display_name === who).visits;
+  const myVisits = async () => (await as("A", "select visits from my_month_stats()"))[0].visits;
+  const before = await visits("Aさん");
+  const beforeMine = await myVisits();
+  // 今日の JST 6:00 と 6:00（同時刻の重複）、7:30（1.5時間後）→ 1回
+  for (const t of ["06:00", "06:00", "07:30"]) {
+    await as("A", `select save_training_session(null, (jst_today()::text || ' ${t}:00+09')::timestamptz, '[]')`);
+  }
+  assert.equal(await visits("Aさん"), before + 1, "重複・3時間以内は1回");
+  assert.equal(await myVisits(), beforeMine + 1, "ホームの今月の活動も同じ数え方");
+  // 同じ日の 11:00（前の記録から3.5時間後）→ 別の来店
+  await as("A", "select save_training_session(null, (jst_today()::text || ' 11:00:00+09')::timestamptz, '[]')");
+  assert.equal(await visits("Aさん"), before + 2);
+  const [{ training_days }] = await as("A", "select training_days from my_month_stats()");
+  assert.ok(training_days >= 1, "トレーニング日数は日数のまま");
 });
 
 await test("アプリのクエリが指定している外部キー名が存在する", async () => {

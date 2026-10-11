@@ -128,7 +128,7 @@ export default async function RankingPage({ searchParams }: PageProps<"/ranking"
         )}
         <p className="mt-3 text-xs text-muted">
           {metric === "visits"
-            ? "Fit訪問回数はトレーニング記録の数です（チェックインは数えません）。"
+            ? "Fit訪問回数はトレーニング記録から数えます。同じ日に3時間以内に付けた記録は1回の来店として数えます（チェックインは数えません）。"
             : "その月にやった種目の種類の数です。名前をタップすると、やった種目と回数が見られます。"}
           同じ値の人は同じ順位です。
         </p>
