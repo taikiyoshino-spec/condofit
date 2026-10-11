@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { finishSessionAction, saveSessionAction } from "@/app/actions/records";
+import { exerciseHistoryAction, finishSessionAction, saveSessionAction, type ExerciseHistoryResult } from "@/app/actions/records";
+import { HistorySheet } from "./history-sheet";
 import { checkOutAction } from "@/app/actions/checkin";
 import { BottomSheet } from "@/components/bottom-sheet";
 import { showToast } from "@/components/toaster";
@@ -110,6 +111,18 @@ export function SessionEditor({
   const [finishing, setFinishing] = useState(false);
   const [checkoutPrompt, setCheckoutPrompt] = useState(false);
   const [checkingOut, setCheckingOut] = useState(false);
+  // 入力中にその種目の過去の記録を見るシート
+  const [historyName, setHistoryName] = useState<string | null>(null);
+  const [historyData, setHistoryData] = useState<ExerciseHistoryResult | null>(null);
+  const historyRequest = useRef(0);
+  const openHistory = async (exerciseId: string, name: string) => {
+    const req = ++historyRequest.current;
+    setHistoryName(name);
+    setHistoryData(null);
+    const data = await exerciseHistoryAction(exerciseId, sessionIdRef.current);
+    // 続けて別の種目を開いたときは、古い結果で上書きしない
+    if (req === historyRequest.current) setHistoryData(data);
+  };
 
   // 保存処理から常に最新の値を読むための参照
   const latest = useRef({ performedAt, blocks, menuName });
@@ -351,6 +364,13 @@ export function SessionEditor({
           <li key={b.key} className="mx-4 rounded-xl border border-border bg-surface p-4">
             <div className="mb-2 flex items-center gap-1">
               <span className="flex-1 font-semibold">{b.name}</span>
+              <button
+                type="button"
+                onClick={() => void openHistory(b.exerciseId, b.name)}
+                className="rounded-full border border-border px-2.5 py-0.5 text-xs text-muted"
+              >
+                履歴
+              </button>
               <IconButton label="上へ" disabled={i === 0} onClick={() => move(i, -1)} path="M6 15l6-6 6 6" />
               <IconButton label="下へ" disabled={i === blocks.length - 1} onClick={() => move(i, 1)} path="M6 9l6 6 6-6" />
               <IconButton label={`${b.name}を削除`} onClick={() => update(b.key, () => null)} path="M6 6l12 12M18 6L6 18" />
@@ -443,6 +463,8 @@ export function SessionEditor({
           {finishing ? "保存中…" : "完了"}
         </button>
       </div>
+
+      <HistorySheet name={historyName} data={historyData} onClose={() => setHistoryName(null)} />
 
       <BottomSheet open={checkoutPrompt} onClose={() => void answerCheckout(false)} title="チェックアウトしますか？">
         <p className="mb-4 text-sm text-muted">記録を保存しました。Fitを出るなら、チェックアウトしておきましょう。</p>

@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { requireMember } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { fromJstInputValue, type Entry, type ExerciseType } from "@/lib/records/format";
-import { detectPersonalBests, formatMetric, METRIC_INFO } from "@/lib/records/progress";
+import { detectPersonalBests, formatMetric, METRIC_INFO, progressSeries } from "@/lib/records/progress";
+import { getExercise, getMyExerciseHistory } from "@/lib/exercises/queries";
 
 export type SaveInput = {
   performedAtLocal: string; // JST の "YYYY-MM-DDTHH:mm"
@@ -178,4 +179,32 @@ async function findPersonalBests(userId: string, savedId: string, saved: SavedEx
     }
   }
   return messages;
+}
+
+export type ExerciseHistoryResult = {
+  ok: boolean;
+  type: ExerciseType;
+  sessions: { date: string; entries: Entry[] }[];
+  best: string | null;
+};
+
+/** 記録の入力中に見る、その種目の最近の記録（入力中の記録は除く、新しい順に最大8回分）と自己ベスト */
+export async function exerciseHistoryAction(exerciseId: string, excludeSessionId: string | null): Promise<ExerciseHistoryResult> {
+  const member = await requireMember();
+  const empty: ExerciseHistoryResult = { ok: false, type: "weight", sessions: [], best: null };
+  if (!UUID_RE.test(exerciseId)) return empty;
+  const exercise = await getExercise(exerciseId);
+  if (!exercise) return empty;
+  const history = (await getMyExerciseHistory(member.id, exercise)).filter((h) => h.sessionId !== excludeSessionId);
+  const series = progressSeries(
+    history.map((h) => ({ date: h.date, entries: h.entries })),
+    exercise.type === "weight" ? "maxWeight" : "duration",
+  );
+  const bestPoint = series.find((p) => p.isBest);
+  return {
+    ok: true,
+    type: exercise.type,
+    sessions: history.slice(0, 8).map((h) => ({ date: h.date, entries: h.entries })),
+    best: bestPoint ? formatMetric(exercise.type === "weight" ? "maxWeight" : "duration", bestPoint.value, bestPoint.repsAtMax) : null,
+  };
 }

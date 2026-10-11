@@ -44,9 +44,9 @@ function ExerciseName({ name }: { name: string }) {
   );
 }
 
-type ListProps = { items: RecentProgress[]; title?: string; moreHref?: string };
+type ListProps = { items: RecentProgress[]; title?: string; moreHref?: string; from?: "growth" | "records" };
 
-export function RecentProgressList({ items, title = "最近の成長", moreHref }: ListProps) {
+export function RecentProgressList({ items, title = "最近の成長", moreHref, from = "growth" }: ListProps) {
   if (items.length === 0) return null;
   return (
     <section className="mx-4 mb-4 rounded-xl border border-border bg-surface p-4" aria-label={title}>
@@ -61,7 +61,7 @@ export function RecentProgressList({ items, title = "最近の成長", moreHref 
       <ul className="divide-y divide-border">
         {items.map(({ exerciseId, name, summary: s }) => (
           <li key={exerciseId}>
-            <Link href={`/exercises/${exerciseId}`} className="flex items-center gap-3 py-2.5">
+            <Link href={`/exercises/${exerciseId}?from=${from}`} className="flex items-center gap-3 py-2.5">
               <span className="min-w-0 flex-1">
                 <span className="line-clamp-2 block text-sm font-medium [word-break:keep-all]">
                   <ExerciseName name={name} />

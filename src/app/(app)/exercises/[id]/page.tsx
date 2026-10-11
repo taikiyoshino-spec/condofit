@@ -11,47 +11,60 @@ import { RankBadge } from "@/components/rank-badge";
 
 const UUID_RE = /^[0-9a-f-]{36}$/i;
 
-export default async function ExerciseDetailPage({ params }: PageProps<"/exercises/[id]">) {
+export default async function ExerciseDetailPage({ params, searchParams }: PageProps<"/exercises/[id]">) {
   const member = await requireMember();
   const { id } = await params;
+  // 成長タブ・記録タブから来たときは自分の推移を先に、戻り先も元の画面に
+  const { from } = await searchParams;
+  const mine = from === "growth" || from === "records";
   if (!UUID_RE.test(id)) notFound();
   const exercise = await getExercise(id);
   if (!exercise) notFound();
   const [members, history] = await Promise.all([getMonthRepresentatives(exercise), getMyExerciseHistory(member.id, exercise)]);
 
+  const monthSection = (
+    <Section title="今月">
+      {members.length === 0 ? (
+        <p className="text-sm text-muted">今月はまだ誰も記録していません</p>
+      ) : (
+        <ul className="divide-y divide-border">
+          {members.map((m) => (
+            <li key={m.userId} className="flex items-center gap-3 py-2.5 text-sm">
+              <RankBadge rank={m.rank} />
+              <MemberName userId={m.userId} name={m.displayName} size={26} className={`flex-1 ${m.userId === member.id ? "font-medium" : ""}`} />
+              <span>{formatEntry(exercise.type, m.value) ?? "やった"}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      <p className="mt-2 text-xs text-muted">
+        {exercise.type === "weight" ? "今月の最大重量と、その重量での回数です。重い順（同じ重さなら回数の多い順）に並べています。" : "今月いちばん長くやった回の合計時間と距離です。時間の長い順（同じなら距離の長い順）に並べています。"}
+      </p>
+    </Section>
+  );
+  const myProgress = (
+    <Section title="自分の推移">
+      <ProgressChart type={exercise.type} sessions={history.map((h) => ({ date: h.date, entries: h.entries }))} />
+      <h3 className="mb-1 mt-5 text-sm font-medium text-muted">記録の一覧</h3>
+      <ExerciseHistory type={exercise.type} points={history} />
+    </Section>
+  );
+
   return (
     <>
       <RealtimeRefresh tables={["training_sessions"]} />
-      <PageHeader title={exercise.name} back={exercise.bodyPartId ? `/exercises/p/${exercise.bodyPartId}` : "/records/progress"} />
+      <PageHeader
+        title={exercise.name}
+        back={from === "records" ? "/records" : from === "growth" || !exercise.bodyPartId ? "/growth" : `/exercises/p/${exercise.bodyPartId}`}
+      />
       <p className="px-4 pb-3 text-xs text-muted">
         {exercise.custom ? "自分の種目（ほかのメンバーには見えません）" : exercise.bodyPartName}・{exercise.type === "weight" ? "重量系" : "有酸素"}
         {!exercise.active && "（現在は非表示の種目です）"}
       </p>
 
-      <Section title="今月">
-        {members.length === 0 ? (
-          <p className="text-sm text-muted">今月はまだ誰も記録していません</p>
-        ) : (
-          <ul className="divide-y divide-border">
-            {members.map((m) => (
-              <li key={m.userId} className="flex items-center gap-3 py-2.5 text-sm">
-                <RankBadge rank={m.rank} />
-                <MemberName userId={m.userId} name={m.displayName} size={26} className={`flex-1 ${m.userId === member.id ? "font-medium" : ""}`} />
-                <span>{formatEntry(exercise.type, m.value) ?? "やった"}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-        <p className="mt-2 text-xs text-muted">
-          {exercise.type === "weight" ? "今月の最大重量と、その重量での回数です。重い順（同じ重さなら回数の多い順）に並べています。" : "今月いちばん長くやった回の合計時間と距離です。時間の長い順（同じなら距離の長い順）に並べています。"}
-        </p>
-      </Section>
-
-      <Section title="自分の推移">
-        <ProgressChart type={exercise.type} sessions={history.map((h) => ({ date: h.date, entries: h.entries }))} />
-        <h3 className="mb-1 mt-5 text-sm font-medium text-muted">記録の一覧</h3>
-        <ExerciseHistory type={exercise.type} points={history} />
-      </Section>
+      {mine && myProgress}
+      {monthSection}
+      {!mine && myProgress}
     </>
   );
 }
