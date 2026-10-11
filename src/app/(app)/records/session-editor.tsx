@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { finishSessionAction, saveSessionAction } from "@/app/actions/records";
+import { checkOutAction } from "@/app/actions/checkin";
+import { BottomSheet } from "@/components/bottom-sheet";
 import { showToast } from "@/components/toaster";
 import { jstDateOf, toJstInputValue, type Entry, type ExerciseType } from "@/lib/records/format";
 import {
@@ -106,6 +108,8 @@ export function SessionEditor({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [save, setSave] = useState<SaveState>(initialSessionId ? { state: "saved", at: 0 } : { state: "idle" });
   const [finishing, setFinishing] = useState(false);
+  const [checkoutPrompt, setCheckoutPrompt] = useState(false);
+  const [checkingOut, setCheckingOut] = useState(false);
 
   // 保存処理から常に最新の値を読むための参照
   const latest = useRef({ performedAt, blocks, menuName });
@@ -131,7 +135,6 @@ export function SessionEditor({
   const inFlight = useRef<Promise<boolean> | null>(null);
   const again = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const celebrated = useRef(new Set<string>());
 
   /** 未保存の内容をサーバーへ保存する。保存中に変更があれば続けてもう一度保存。成功したら true */
   const runSave = useCallback((): Promise<boolean> => {
@@ -160,11 +163,7 @@ export function SessionEditor({
             const { blocks: current, menuName: name } = latest.current;
             if (name && current.some((x) => x.rows.some((r) => r.fromPlan))) storePlan(result.id, { menuName: name, blocks: current });
           }
-          for (const pb of result.personalBests) {
-            if (celebrated.current.has(pb)) continue;
-            celebrated.current.add(pb);
-            showToast(`🎉 自己ベスト更新！ ${pb}`, { variant: "celebrate" });
-          }
+          // 自己ベストのお祝いは「完了」のときだけ（入力途中の値では判定しない）
         } while (again.current);
         setSave({ state: "saved", at: Date.now() });
         return true;
@@ -277,12 +276,33 @@ export function SessionEditor({
       setFinishing(false);
       return;
     }
-    await finishSessionAction();
+    const result = await finishSessionAction(sessionIdRef.current);
     // 完了したら、やらなかった予定は残さない
     if (sessionIdRef.current) storePlan(sessionIdRef.current, null);
-    if (celebrated.current.size === 0) showToast("記録を保存しました");
+    // 自己ベストは最終的な記録で判定してここでお祝い
+    if (result.personalBests.length > 0) {
+      for (const pb of result.personalBests.slice(0, 3)) showToast(`🎉 自己ベスト更新！ ${pb}`, { variant: "celebrate" });
+    } else {
+      showToast("記録を保存しました");
+    }
+    // チェックイン中なら、チェックアウトするか確認してから移動
+    if (result.checkedIn) setCheckoutPrompt(true);
+    else goToDay();
+  };
+
+  const goToDay = () => {
     router.push(`/records/${jstDateOf(new Date(`${latest.current.performedAt}:00+09:00`).toISOString())}`);
     router.refresh();
+  };
+
+  const answerCheckout = async (checkOut: boolean) => {
+    setCheckingOut(true);
+    if (checkOut) {
+      const r = await checkOutAction();
+      showToast(r.ok ? "チェックアウトしました" : "チェックアウトできませんでした。ホームから操作してください");
+    }
+    setCheckoutPrompt(false);
+    goToDay();
   };
 
   return (
@@ -423,6 +443,28 @@ export function SessionEditor({
           {finishing ? "保存中…" : "完了"}
         </button>
       </div>
+
+      <BottomSheet open={checkoutPrompt} onClose={() => void answerCheckout(false)} title="チェックアウトしますか？">
+        <p className="mb-4 text-sm text-muted">記録を保存しました。Fitを出るなら、チェックアウトしておきましょう。</p>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={checkingOut}
+            onClick={() => void answerCheckout(false)}
+            className="flex-1 rounded-lg border border-border py-3 text-sm"
+          >
+            まだFitにいる
+          </button>
+          <button
+            type="button"
+            disabled={checkingOut}
+            onClick={() => void answerCheckout(true)}
+            className="flex-1 rounded-lg bg-accent py-3 text-sm font-semibold text-accent-fg disabled:opacity-50"
+          >
+            {checkingOut ? "処理中…" : "チェックアウトする"}
+          </button>
+        </div>
+      </BottomSheet>
 
       <ExercisePicker
         open={pickerOpen}

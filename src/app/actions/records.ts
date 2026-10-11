@@ -11,7 +11,7 @@ export type SaveInput = {
   exercises: { exerciseId: string; entries: Entry[] }[];
 };
 
-export type SaveResult = { ok: true; id: string; personalBests: string[] } | { ok: false; error: string };
+export type SaveResult = { ok: true; id: string } | { ok: false; error: string };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_EXERCISES = 50;
@@ -40,7 +40,7 @@ export async function saveSessionAction(
   input: SaveInput,
   options: { revalidate?: boolean } = {},
 ): Promise<SaveResult> {
-  const member = await requireMember();
+  await requireMember();
   if (sessionId !== null && !UUID_RE.test(sessionId)) return { ok: false, error: "不正な記録です" };
 
   const performedAt = fromJstInputValue(input.performedAtLocal);
@@ -73,15 +73,43 @@ export async function saveSessionAction(
   }
   if (options.revalidate !== false) revalidate();
   const savedId = data as string;
-  // 自己ベストの判定に失敗しても保存自体は成功扱い
-  const personalBests = await findPersonalBests(member.id, savedId, payload).catch(() => []);
-  return { ok: true, id: savedId, personalBests };
+  return { ok: true, id: savedId };
 }
 
-/** 入力の完了時に、記録タブ・ホーム・種目などの表示を最新にする */
-export async function finishSessionAction() {
-  await requireMember();
+export type FinishResult = { personalBests: string[]; checkedIn: boolean };
+
+/**
+ * 入力の完了時: 表示を最新にし、最終的な記録で自己ベストを判定する（入力途中では判定しない）。
+ * チェックイン中かどうかも返す（完了時にチェックアウトを確認するため）
+ */
+export async function finishSessionAction(sessionId: string | null): Promise<FinishResult> {
+  const member = await requireMember();
   revalidate();
+  const supabase = await createClient();
+
+  const { data: active } = await supabase
+    .from("check_ins")
+    .select("id")
+    .eq("user_id", member.id)
+    .eq("status", "active")
+    .maybeSingle();
+
+  let personalBests: string[] = [];
+  if (sessionId && UUID_RE.test(sessionId)) {
+    const { data } = await supabase
+      .from("training_sessions")
+      .select("id, session_exercises(exercise_id, exercise_entries(weight_kg, reps, duration_min, distance_km))")
+      .eq("id", sessionId)
+      .eq("user_id", member.id)
+      .maybeSingle();
+    if (data) {
+      type SavedRow = { session_exercises: { exercise_id: string; exercise_entries: Partial<Entry>[] }[] };
+      const saved = (data as unknown as SavedRow).session_exercises.map((se) => ({ exercise_id: se.exercise_id, entries: se.exercise_entries }));
+      // 自己ベストの判定に失敗しても完了自体は成功扱い
+      personalBests = await findPersonalBests(member.id, sessionId, saved).catch(() => []);
+    }
+  }
+  return { personalBests, checkedIn: Boolean(active) };
 }
 
 export async function deleteSessionAction(sessionId: string): Promise<{ ok: boolean; error?: string }> {
@@ -101,11 +129,13 @@ export async function deleteSessionAction(sessionId: string): Promise<{ ok: bool
 
 type SavedExercise = { exercise_id: string; entries: Partial<Entry>[] };
 
+// DBから読んだ値は文字列のこともあるので数値にそろえる
+const toNum = (v: unknown) => (v === null || v === undefined || v === "" ? null : Number(v));
 const toEntry = (e: Partial<Entry>): Entry => ({
-  weight_kg: e.weight_kg ?? null,
-  reps: e.reps ?? null,
-  duration_min: e.duration_min ?? null,
-  distance_km: e.distance_km ?? null,
+  weight_kg: toNum(e.weight_kg),
+  reps: toNum(e.reps),
+  duration_min: toNum(e.duration_min),
+  distance_km: toNum(e.distance_km),
 });
 
 /** 今回保存した記録で更新した自己ベスト（「ラットプル 最大重量 60kg×5回」の形）。過去の自分の記録とだけ比べる */
