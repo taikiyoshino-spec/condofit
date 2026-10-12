@@ -1,19 +1,19 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { assignRanks, byDesc, type Ranked } from "@/lib/ranking";
+import { partScore } from "@/lib/records/parts";
+import { getPartSessions, monthBounds, type PartInfo } from "@/lib/records/parts-queries";
 
-export type RankingMetric = "visits" | "kinds";
+export type RankingMetric = "visits" | "parts";
 export type RankingRow = { userId: string; displayName: string; visits: number; exerciseKinds: number };
 
 export const METRIC_LABEL: Record<RankingMetric, { label: string; unit: string }> = {
   visits: { label: "Fit訪問回数", unit: "回" },
-  kinds: { label: "種目の数", unit: "種" },
+  parts: { label: "部位別", unit: "セット" },
 };
 
-export const metricValue = (metric: RankingMetric, r: RankingRow) => (metric === "visits" ? r.visits : r.exerciseKinds);
-
 /** 月間の総合ランキング（month は "YYYY-MM"） */
-export async function getMonthlyRanking(month: string, metric: RankingMetric): Promise<Ranked<RankingRow>[]> {
+export async function getMonthlyRanking(month: string): Promise<Ranked<RankingRow>[]> {
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("monthly_ranking", { p_month: `${month}-01` });
   if (error) throw error;
@@ -26,50 +26,24 @@ export async function getMonthlyRanking(month: string, metric: RankingMetric): P
   // 同じ値は同順位。並びは表示名順で安定させる
   const ranked = assignRanks(
     rows.sort((a, b) => a.displayName.localeCompare(b.displayName, "ja")),
-    byDesc((r: RankingRow) => metricValue(metric, r)),
+    byDesc((r: RankingRow) => r.visits),
   );
   return ranked;
 }
 
-export type MemberExercise = { exerciseId: string; name: string; count: number };
+export type PartRankingRow = {
+  userId: string;
+  displayName: string;
+  value: number;
+  breakdown: { exerciseId: string; name: string; value: number }[];
+};
 
-/**
- * その月に各メンバーがやった種目（種目名とセッション数のみ。重量・回数は含めない）。
- * 戻り値は userId → 種目一覧（回数の多い順）
- */
-export async function getMonthlyExercisesByUser(month: string): Promise<Record<string, MemberExercise[]>> {
-  const supabase = await createClient();
-  const start = new Date(`${month}-01T00:00:00+09:00`);
-  const [y, m] = month.split("-").map(Number);
-  const end = new Date(`${m === 12 ? y + 1 : y}-${String(m === 12 ? 1 : m + 1).padStart(2, "0")}-01T00:00:00+09:00`);
-  const { data, error } = await supabase
-    .from("training_sessions")
-    .select("user_id, session_exercises(exercise_id, exercises(name, owner_user_id))")
-    .gte("performed_at", start.toISOString())
-    .lt("performed_at", end.toISOString());
-  if (error) throw error;
-
-  type Row = { user_id: string; session_exercises: { exercise_id: string; exercises: { name: string; owner_user_id: string | null } | null }[] };
-  const byUser = new Map<string, Map<string, MemberExercise>>();
-  for (const s of data as unknown as Row[]) {
-    const mine = byUser.get(s.user_id) ?? new Map<string, MemberExercise>();
-    // 同じセッション内で同じ種目を複数回登録していても1回と数える
-    const seen = new Set<string>();
-    for (const se of s.session_exercises) {
-      // 自分専用の種目（他の人には見えない・本人のものも数えない）は内訳に出さない
-      if (!se.exercises || se.exercises.owner_user_id !== null) continue;
-      if (seen.has(se.exercise_id)) continue;
-      seen.add(se.exercise_id);
-      const cur = mine.get(se.exercise_id) ?? { exerciseId: se.exercise_id, name: se.exercises?.name ?? "", count: 0 };
-      cur.count++;
-      mine.set(se.exercise_id, cur);
-    }
-    byUser.set(s.user_id, mine);
-  }
-  return Object.fromEntries(
-    [...byUser].map(([userId, list]) => [
-      userId,
-      [...list.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, "ja")),
-    ]),
-  );
+/** 月間の部位別ランキング。筋トレの部位はセット数、有酸素の部位は合計時間（分）。自分専用の種目は数えない */
+export async function getMonthlyPartRanking(month: string, part: PartInfo): Promise<Ranked<PartRankingRow>[]> {
+  const [members, sessions] = await Promise.all([getMonthlyRanking(month), getPartSessions(monthBounds(month))]);
+  const byUser = Map.groupBy(sessions, (s) => s.userId);
+  const rows = members
+    .map((m) => ({ userId: m.userId, displayName: m.displayName, ...partScore(byUser.get(m.userId) ?? [], part.id, part.cardio) }))
+    .sort((a, b) => a.displayName.localeCompare(b.displayName, "ja"));
+  return assignRanks(rows, byDesc((r: PartRankingRow) => r.value));
 }

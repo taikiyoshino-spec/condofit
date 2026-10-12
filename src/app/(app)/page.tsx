@@ -26,7 +26,7 @@ export default async function HomePage() {
     listSchedules(today, addDays(today, 4)),
     getMyMonthStats(),
     getRecentActivity(),
-    getMonthlyRanking(monthOf(today), "visits"),
+    getMonthlyRanking(monthOf(today)),
   ]);
   const top = ranking.filter((r) => r.visits > 0).slice(0, 3);
 

@@ -4,14 +4,21 @@ import { getMyRecentProgress } from "@/lib/records/queries";
 import { getMyActivitySummary } from "@/lib/exercises/queries";
 import { PageHeader, Section } from "@/components/page";
 import { RecentProgressList } from "../records/recent-progress";
+import { getPartSessions, listPartInfo, recentFourWeeks } from "@/lib/records/parts-queries";
+import { partBalance } from "@/lib/records/parts";
+import { PartBalanceSection } from "./part-balance";
 
 /** 成長タブ: 自分の活動サマリーと全種目の成長一覧。種目をタップすると成長グラフと過去の記録へ */
 export default async function GrowthPage() {
   const member = await requireMember();
-  const [summary, items] = await Promise.all([
+  const [summary, items, parts, partSessions] = await Promise.all([
     getMyActivitySummary(member.id),
     getMyRecentProgress(member.id, Number.POSITIVE_INFINITY),
+    listPartInfo(),
+    getPartSessions({ userId: member.id, ...recentFourWeeks() }),
   ]);
+  const balance = partBalance(partSessions, parts, new Set(parts.filter((p) => p.cardio).map((p) => p.id)));
+  const notMuscle = new Set(parts.filter((p) => p.freeWeight).map((p) => p.id));
   const rows = [
     { label: "Fit訪問", unit: "回", month: summary.month.visits, total: summary.total.visits },
     { label: "トレーニング日数", unit: "日", month: summary.month.trainingDays, total: summary.total.trainingDays },
@@ -47,6 +54,8 @@ export default async function GrowthPage() {
           </tbody>
         </table>
       </Section>
+
+      <PartBalanceSection balance={balance} excludeFromWeak={notMuscle} />
 
       {items.length === 0 ? (
         <Section>
