@@ -44,10 +44,9 @@ export default async function HomePage() {
       <NextDays today={today} schedules={schedules} myId={member.id} />
 
       <Section title="今月の活動">
-        <dl className="grid grid-cols-3 text-center">
+        <dl className="grid grid-cols-2 text-center">
           {[
             { label: "Fit", value: stats.visits, unit: "回" },
-            { label: "トレーニング日数", value: stats.trainingDays, unit: "日" },
             { label: "種目", value: stats.exerciseKinds, unit: "種" },
           ].map((s) => (
             <div key={s.label}>

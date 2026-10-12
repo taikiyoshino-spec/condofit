@@ -21,7 +21,6 @@ export default async function GrowthPage() {
   const notMuscle = new Set(parts.filter((p) => p.freeWeight).map((p) => p.id));
   const rows = [
     { label: "Fit訪問", unit: "回", month: summary.month.visits, total: summary.total.visits },
-    { label: "トレーニング日数", unit: "日", month: summary.month.trainingDays, total: summary.total.trainingDays },
     { label: "種目数", unit: "種", month: summary.month.exerciseKinds, total: summary.total.exerciseKinds },
   ];
 
