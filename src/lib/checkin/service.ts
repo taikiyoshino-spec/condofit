@@ -126,11 +126,19 @@ export async function notifyStaleCheckIns() {
   const userIds = (data as { user_id: string }[]).map((r) => r.user_id);
   await sendPush(userIds, "location_stale", {
     title: "CondoFit",
-    body: "位置情報を15分間確認できませんでした。まだFitにいますか？",
+    body: "位置情報を15分間確認できませんでした。まだFitにいますか？（1時間確認できないと自動でチェックアウトします）",
     url: "/?fit=1",
     tag: "location_stale",
   });
   return userIds.length;
+}
+
+/** 定期処理: 最後の位置確認から1時間以上たったチェックインを自動チェックアウト */
+export async function autoCheckOutStaleCheckIns() {
+  const admin = createAdminClient();
+  const { data, error } = await admin.rpc("auto_check_out_stale_check_ins");
+  if (error) throw error;
+  return data as number;
 }
 
 export async function purgeExpiredNotifications() {
