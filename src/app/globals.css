@@ -30,6 +30,18 @@
   }
 }
 
+/* CondoCook の画面（/cook）はオレンジ系の差し色 */
+.theme-cook {
+  --accent: #b9501a;
+  --accent-fg: #ffffff;
+}
+@media (prefers-color-scheme: dark) {
+  .theme-cook {
+    --accent: #f08a4b;
+    --accent-fg: #1f1006;
+  }
+}
+
 @theme inline {
   --color-bg: var(--bg);
   --color-surface: var(--surface);

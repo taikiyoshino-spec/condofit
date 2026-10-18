@@ -1,4 +1,5 @@
-// PWA用のシンプルなアイコン（緑地に白いリング）を生成する。画像ツールなしで PNG を直接書き出す。
+// PWA用のシンプルなアイコンを生成する。画像ツールなしで PNG を直接書き出す。
+// CondoFit: 緑地に白いリング（"C"）、CondoCook: オレンジ地に白いお椀
 import { deflateSync } from "node:zlib";
 import { writeFileSync } from "node:fs";
 
@@ -21,8 +22,8 @@ const chunk = (type, data) => {
   return Buffer.concat([len, body, crc]);
 };
 
-function png(size, { maskable = false } = {}) {
-  const bg = [0x1f, 0x8a, 0x4c];
+function png(size, { maskable = false, cook = false } = {}) {
+  const bg = cook ? [0xb9, 0x50, 0x1a] : [0x1f, 0x8a, 0x4c];
   const fg = [0xff, 0xff, 0xff];
   const c = size / 2;
   const scale = maskable ? 0.8 : 1; // maskable はセーフゾーン内に収める
@@ -35,7 +36,15 @@ function png(size, { maskable = false } = {}) {
       const d = Math.hypot(x + 0.5 - c, y + 0.5 - c);
       // 右下を欠いたリング（"C"）
       const gap = x > c && y > c - size * 0.05 && y < c + size * 0.05;
-      const on = d <= outer && d >= inner && !gap;
+      // お椀: 下半分の円＋縁、上に湯気の線2本
+      const yy = y + 0.5 - c;
+      const bowl = yy >= -size * 0.02 * scale && d <= outer;
+      const rim = Math.abs(yy + size * 0.02 * scale) <= size * 0.025 * scale && Math.abs(x + 0.5 - c) <= outer * 1.1;
+      const steam = [-0.08, 0.08].some(
+        (dx) => Math.abs(x + 0.5 - (c + size * dx * scale + Math.sin((yy / size) * 18) * size * 0.015)) <= size * 0.018 * scale &&
+          yy < -size * 0.08 * scale && yy > -size * 0.3 * scale,
+      );
+      const on = cook ? bowl || rim || steam : d <= outer && d >= inner && !gap;
       row.push(...(on ? fg : bg));
     }
     rows.push(Buffer.from(row));
@@ -57,4 +66,8 @@ writeFileSync("public/icons/icon-192.png", png(192));
 writeFileSync("public/icons/icon-512.png", png(512));
 writeFileSync("public/icons/icon-maskable-512.png", png(512, { maskable: true }));
 writeFileSync("public/icons/apple-touch-icon.png", png(180));
+writeFileSync("public/icons/cook-192.png", png(192, { cook: true }));
+writeFileSync("public/icons/cook-512.png", png(512, { cook: true }));
+writeFileSync("public/icons/cook-maskable-512.png", png(512, { maskable: true, cook: true }));
+writeFileSync("public/icons/cook-apple-touch-icon.png", png(180, { cook: true }));
 console.log("icons generated");
