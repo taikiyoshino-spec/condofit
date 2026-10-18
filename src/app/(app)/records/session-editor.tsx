@@ -4,9 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { exerciseHistoryAction, finishSessionAction, saveSessionAction, type ExerciseHistoryResult } from "@/app/actions/records";
 import { HistorySheet } from "./history-sheet";
-import { checkOutAction } from "@/app/actions/checkin";
+import { checkOutAction, verifyLocationAction } from "@/app/actions/checkin";
 import { BottomSheet } from "@/components/bottom-sheet";
 import { showToast } from "@/components/toaster";
+import { getPosition } from "@/lib/client/geolocation";
 import { jstDateOf, toJstInputValue, type Entry, type ExerciseType } from "@/lib/records/format";
 import {
   asManualRow,
@@ -36,6 +37,7 @@ type SaveState =
 
 const TYPING_DELAY_MS = 800;
 const STRUCTURE_DELAY_MS = 150;
+const VERIFY_THROTTLE_MS = 30_000;
 // メニューで記録中の「まだやっていない予定のセット」はサーバーに保存しないので、この端末に覚えておく
 const PLAN_KEY = (sessionId: string) => `condofit:record-plan:${sessionId}`;
 
@@ -76,6 +78,8 @@ type Props = {
   lastEntries: Record<string, Entry[]>;
   /** メニューから始めたとき */
   menu?: MenuForEditor | null;
+  /** 開いた時点でチェックイン中か（保存のたびに位置を確認するため） */
+  checkedIn: boolean;
 };
 
 /** 保存する内容は「できた」行だけ（予定・やらなかったセットは記録しない） */
@@ -91,6 +95,7 @@ export function SessionEditor({
   recentExerciseIds,
   lastEntries,
   menu,
+  checkedIn,
 }: Props) {
   const router = useRouter();
   const [performedAt, setPerformedAt] = useState(() => toJstInputValue(initialPerformedAt));
@@ -149,6 +154,21 @@ export function SessionEditor({
   const again = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
+  // チェックイン中は記録を保存するたびに位置を確認する（位置確認が1時間途切れると自動チェックアウトのため）。
+  // 入力中は保存が続くので30秒に1回まで。失敗しても記録には影響させない
+  const checkedInRef = useRef(checkedIn);
+  const lastVerify = useRef(0);
+  const verifyLocation = useCallback(async () => {
+    if (!checkedInRef.current || Date.now() - lastVerify.current < VERIFY_THROTTLE_MS) return;
+    lastVerify.current = Date.now();
+    try {
+      const result = await verifyLocationAction(await getPosition({ fresh: false }));
+      if (result.status === "not_checked_in") checkedInRef.current = false;
+    } catch {
+      // 位置を取れなくても記録の保存はそのまま
+    }
+  }, []);
+
   /** 未保存の内容をサーバーへ保存する。保存中に変更があれば続けてもう一度保存。成功したら true */
   const runSave = useCallback((): Promise<boolean> => {
     clearTimeout(timer.current);
@@ -179,6 +199,7 @@ export function SessionEditor({
           // 自己ベストのお祝いは「完了」のときだけ（入力途中の値では判定しない）
         } while (again.current);
         setSave({ state: "saved", at: Date.now() });
+        void verifyLocation();
         return true;
       } catch {
         dirty.current = true;
@@ -190,7 +211,7 @@ export function SessionEditor({
     })();
     inFlight.current = task;
     return task;
-  }, []);
+  }, [verifyLocation]);
 
   /** 変更を記録し、少し待ってから保存する */
   const scheduleSave = useCallback(

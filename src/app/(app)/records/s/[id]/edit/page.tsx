@@ -3,6 +3,7 @@ import { requireMember } from "@/lib/auth/session";
 import { getCatalog, getMyExerciseHistory, getSession } from "@/lib/records/queries";
 import { jstDateOf } from "@/lib/records/format";
 import { PageHeader } from "@/components/page";
+import { isCheckedIn } from "@/lib/checkin/service";
 import { SessionEditor } from "../../../session-editor";
 
 const UUID_RE = /^[0-9a-f-]{36}$/i;
@@ -15,7 +16,11 @@ export default async function EditRecordPage({ params }: PageProps<"/records/s/[
   // 他人の記録は編集させない（DB側でも更新は拒否される）
   if (!session || session.userId !== member.id) notFound();
 
-  const [catalog, history] = await Promise.all([getCatalog(), getMyExerciseHistory(member.id, id)]);
+  const [catalog, history, checkedIn] = await Promise.all([
+    getCatalog(),
+    getMyExerciseHistory(member.id, id),
+    isCheckedIn(member.id),
+  ]);
   return (
     <>
       <PageHeader title="記録を編集" back={`/records/${jstDateOf(session.performedAt)}`} />
@@ -26,6 +31,7 @@ export default async function EditRecordPage({ params }: PageProps<"/records/s/[
         catalog={catalog}
         recentExerciseIds={history.recent}
         lastEntries={history.lastEntries}
+        checkedIn={checkedIn}
       />
     </>
   );

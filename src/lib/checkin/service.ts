@@ -83,6 +83,11 @@ export async function checkOut(): Promise<{ ok: boolean }> {
   return { ok: !error };
 }
 
+/** 自分がいまチェックイン中か（記録入力中の位置確認に使う） */
+export async function isCheckedIn(userId: string) {
+  return Boolean(await getMyActiveCheckIn(userId));
+}
+
 async function getMyActiveCheckIn(userId: string) {
   const supabase = await createClient();
   const { data } = await supabase
