@@ -22,6 +22,14 @@ export default async function MenusPage() {
           </Link>
         }
       />
+      <div className="mx-4 mb-4">
+        <Link
+          href="/records/menus/import"
+          className="block rounded-xl border border-dashed border-accent p-3 text-center text-sm font-medium text-accent"
+        >
+          AIに相談して作る（答えを貼り付けて登録）
+        </Link>
+      </div>
       {menus.length === 0 ? (
         <Section>
           <p className="text-sm text-muted">まだメニューがありません。よくやる種目とセットをメニューにしておくと、記録が「できた」ボタンだけで進められます。</p>

@@ -6,6 +6,7 @@ import { exerciseHistoryAction, finishSessionAction, saveSessionAction, type Exe
 import { HistorySheet } from "./history-sheet";
 import { setCustomExerciseExcludesBarAction } from "@/app/actions/custom-exercises";
 import { checkOutAction, verifyLocationAction } from "@/app/actions/checkin";
+import { raiseMenuWeightsAction } from "@/app/actions/menus";
 import { BottomSheet } from "@/components/bottom-sheet";
 import { showToast } from "@/components/toaster";
 import { getPosition } from "@/lib/client/geolocation";
@@ -16,6 +17,8 @@ import {
   EMPTY_ROW,
   entryToRow,
   menuToBlocks,
+  menuWeightIncreases,
+  type MenuWeightIncrease,
   planProgress,
   type Block,
   type Row,
@@ -50,7 +53,8 @@ export type MenuForEditor = {
   name: string;
   items: { exerciseId: string; name: string; type: ExerciseType; sets: Partial<Entry>[] }[];
 };
-type SavedPlan = { menuName: string; blocks: Block[] };
+/** menuId: 完了時にメニューの重量を更新するため（以前の保存データにはない） */
+type SavedPlan = { menuName: string; menuId?: string | null; blocks: Block[] };
 
 function loadPlan(sessionId: string | null): SavedPlan | null {
   if (!sessionId) return null;
@@ -116,6 +120,10 @@ export function SessionEditor({
   const [save, setSave] = useState<SaveState>(initialSessionId ? { state: "saved", at: 0 } : { state: "idle" });
   const [finishing, setFinishing] = useState(false);
   const [checkoutPrompt, setCheckoutPrompt] = useState(false);
+  const [weightPrompt, setWeightPrompt] = useState<MenuWeightIncrease[] | null>(null);
+  const [applyingWeights, setApplyingWeights] = useState(false);
+  const checkedInAtFinish = useRef(false);
+  const menuIdRef = useRef<string | null>(menu?.id ?? null);
   const [checkingOut, setCheckingOut] = useState(false);
   // 種目ごとの「バーの重さを除いて記録する」と自分の種目か（入力中に作った・切り替えた分も反映）
   const [exerciseInfo, setExerciseInfo] = useState(
@@ -146,7 +154,8 @@ export function SessionEditor({
     latest.current = { performedAt, blocks, menuName };
     // メニューの予定が残っている間は、この端末に予定ごと覚えておく（開き直したら続きから）
     const sid = sessionIdRef.current;
-    if (sid && menuName) storePlan(sid, blocks.some((b) => b.rows.some((r) => r.fromPlan)) ? { menuName, blocks } : null);
+    if (sid && menuName)
+      storePlan(sid, blocks.some((b) => b.rows.some((r) => r.fromPlan)) ? { menuName, menuId: menuIdRef.current, blocks } : null);
   }, [performedAt, blocks, menuName]);
 
   // 開き直したとき、この端末に覚えている予定があれば続きから（サーバーには「できた」分だけ保存されている）
@@ -156,6 +165,7 @@ export function SessionEditor({
       if (!plan) return;
       setBlocks(plan.blocks.map((b) => ({ ...b, key: newKey() })));
       setMenuName(plan.menuName);
+      menuIdRef.current = plan.menuId ?? null;
     }, 0);
     return () => clearTimeout(t);
   }, [initialSessionId]);
@@ -205,7 +215,7 @@ export function SessionEditor({
             // 開き直したときに続きから編集できるよう、URLを編集画面に（画面は作り直さない）
             window.history.replaceState(null, "", `/records/s/${result.id}/edit`);
             const { blocks: current, menuName: name } = latest.current;
-            if (name && current.some((x) => x.rows.some((r) => r.fromPlan))) storePlan(result.id, { menuName: name, blocks: current });
+            if (name && current.some((x) => x.rows.some((r) => r.fromPlan))) storePlan(result.id, { menuName: name, menuId: menuIdRef.current, blocks: current });
           }
           // 自己ベストのお祝いは「完了」のときだけ（入力途中の値では判定しない）
         } while (again.current);
@@ -332,8 +342,30 @@ export function SessionEditor({
       showToast("記録を保存しました");
     }
     // チェックイン中なら、チェックアウトするか確認してから移動
-    if (result.checkedIn) setCheckoutPrompt(true);
+    // メニューより重い重量でできたセットがあれば、メニューに反映するか確認（そのあとチェックアウト確認）
+    checkedInAtFinish.current = result.checkedIn;
+    const increases = menuIdRef.current ? menuWeightIncreases(latest.current.blocks) : [];
+    if (increases.length > 0) setWeightPrompt(increases);
+    else afterWeightPrompt();
+  };
+
+  const afterWeightPrompt = () => {
+    setWeightPrompt(null);
+    if (checkedInAtFinish.current) setCheckoutPrompt(true);
     else goToDay();
+  };
+
+  const answerWeightPrompt = async (apply: boolean) => {
+    if (apply && weightPrompt && menuIdRef.current) {
+      setApplyingWeights(true);
+      const r = await raiseMenuWeightsAction(
+        menuIdRef.current,
+        weightPrompt.map((w) => ({ item: w.item, set: w.set, exerciseId: w.exerciseId, weight: w.to })),
+      );
+      setApplyingWeights(false);
+      showToast(r.ok ? "メニューの重量を更新しました" : "メニューを更新できませんでした");
+    }
+    afterWeightPrompt();
   };
 
   const goToDay = () => {
@@ -517,6 +549,40 @@ export function SessionEditor({
       </div>
 
       <HistorySheet name={historyName} data={historyData} onClose={() => setHistoryName(null)} />
+
+      <BottomSheet open={weightPrompt !== null} onClose={() => void answerWeightPrompt(false)} title="メニューの重量を上げますか？">
+        <p className="mb-3 text-sm text-muted">メニューより重い重量でできました。次からメニューの重量をこの重さにできます。</p>
+        <ul className="mb-4 divide-y divide-border rounded-lg border border-border">
+          {weightPrompt?.map((w) => (
+            <li key={`${w.item}-${w.set}`} className="flex items-center justify-between px-3 py-2 text-sm">
+              <span>
+                {w.name} <span className="text-muted">{w.set + 1}セット目</span>
+              </span>
+              <span>
+                {w.from}kg → <span className="font-semibold text-accent">{w.to}kg</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={applyingWeights}
+            onClick={() => void answerWeightPrompt(false)}
+            className="flex-1 rounded-lg border border-border py-3 text-sm"
+          >
+            メニューはそのまま
+          </button>
+          <button
+            type="button"
+            disabled={applyingWeights}
+            onClick={() => void answerWeightPrompt(true)}
+            className="flex-1 rounded-lg bg-accent py-3 text-sm font-semibold text-accent-fg disabled:opacity-50"
+          >
+            {applyingWeights ? "更新中…" : "メニューに反映する"}
+          </button>
+        </div>
+      </BottomSheet>
 
       <BottomSheet open={checkoutPrompt} onClose={() => void answerCheckout(false)} title="チェックアウトしますか？">
         <p className="mb-4 text-sm text-muted">記録を保存しました。Fitを出るなら、チェックアウトしておきましょう。</p>

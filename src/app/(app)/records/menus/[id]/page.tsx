@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireMember } from "@/lib/auth/session";
 import { getMyMenu } from "@/lib/menus/queries";
@@ -16,6 +17,11 @@ export default async function EditMenuPage({ params }: PageProps<"/records/menus
   return (
     <>
       <PageHeader title="メニューを編集" back="/records/menus" />
+      <div className="mx-4 mb-3">
+        <Link href={`/records/menus/import?menu=${menu.id}`} className="text-sm font-medium text-accent">
+          AIに相談して直す ›
+        </Link>
+      </div>
       <MenuEditor menu={menu} catalog={catalog} recentExerciseIds={history.recent} lastEntries={history.lastEntries} />
     </>
   );

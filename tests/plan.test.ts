@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { adjustCount, blocksToExercises, entryToRow, menuToBlocks, planProgress, type Block } from "../src/lib/records/plan.ts";
+import { adjustCount, blocksToExercises, entryToRow, menuToBlocks, menuWeightIncreases, planProgress, type Block } from "../src/lib/records/plan.ts";
 
 const block = (exerciseId: string, rows: Block["rows"]): Block => ({ key: 1, exerciseId, name: exerciseId, type: "weight", rows });
 
@@ -48,4 +48,26 @@ test("メニュー → 全セット予定の入力ブロック（セットなし
   assert.deepEqual(blocks[0].rows.map((r) => [r.weight, r.reps, r.status, r.fromPlan]), [["40", "10", "planned", true], ["45", "8", "planned", true]]);
   assert.equal(blocks[1].rows.length, 1);
   assert.equal(blocks[1].rows[0].status, "planned");
+});
+
+test("メニューより重い重量でできたセットだけを、メニューの位置付きで返す", () => {
+  let k = 0;
+  const blocks = menuToBlocks(
+    [
+      { exerciseId: "a", name: "A", type: "weight", sets: [{ weight_kg: 40, reps: 10 }, { weight_kg: 45, reps: 8 }, { reps: 10 }] },
+      { exerciseId: "b", name: "B", type: "cardio", sets: [{ duration_min: 20 }] },
+    ],
+    () => ++k,
+  );
+  assert.deepEqual(blocks[0].rows.map((r) => r.planRef), [{ item: 0, set: 0 }, { item: 0, set: 1 }, { item: 0, set: 2 }]);
+  const done = (b: Block, j: number, weight: string) => (b.rows[j] = { ...b.rows[j], weight, status: "done" });
+  done(blocks[0], 0, "42.5"); // 増えた
+  done(blocks[0], 1, "45"); // 同じ
+  done(blocks[0], 2, "20"); // 予定に重量なし → 対象外
+  blocks[1].rows[0] = { ...blocks[1].rows[0], status: "done" };
+  // まだ予定のまま・やらなかった・手入力の行は対象外
+  blocks[0].rows.push({ ...entryToRow({ weight_kg: 100, reps: 1 }), fromPlan: false });
+  assert.deepEqual(menuWeightIncreases(blocks), [{ item: 0, set: 0, exerciseId: "a", name: "A", from: 40, to: 42.5 }]);
+  blocks[0].rows[0] = { ...blocks[0].rows[0], status: "skipped" };
+  assert.deepEqual(menuWeightIncreases(blocks), []);
 });

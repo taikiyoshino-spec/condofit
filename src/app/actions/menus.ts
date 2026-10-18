@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireMember } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import type { Entry } from "@/lib/records/format";
+import { getMyMenu } from "@/lib/menus/queries";
 
 export type MenuInput = { name: string; items: { exerciseId: string; sets: Partial<Entry>[] }[] };
 export type MenuResult = { ok: true; id: string } | { ok: false; error: string };
@@ -45,6 +46,33 @@ export async function saveMenuAction(menuId: string | null, input: MenuInput): P
   if (error) return { ok: false, error: error.message.includes("forbidden") ? "自分のメニューだけ編集できます" : "保存できませんでした" };
   revalidatePath("/records", "layout");
   return { ok: true, id: data as string };
+}
+
+/**
+ * 記録の完了時: メニューの予定より重い重量でできたセットを、メニューに反映する（本人が確認してから呼ぶ）。
+ * メニューがその後に編集されていても壊さないよう、同じ位置の種目が一致し、今の重量より重いときだけ上書きする
+ */
+export async function raiseMenuWeightsAction(
+  menuId: string,
+  changes: { item: number; set: number; exerciseId: string; weight: number }[],
+): Promise<{ ok: boolean; updated: number }> {
+  const member = await requireMember();
+  if (!UUID_RE.test(menuId) || !Array.isArray(changes)) return { ok: false, updated: 0 };
+  const menu = await getMyMenu(member.id, menuId);
+  if (!menu) return { ok: false, updated: 0 };
+
+  const items = menu.items.map((it) => ({ exerciseId: it.exerciseId, sets: it.sets.map((s) => ({ ...s })) }));
+  let updated = 0;
+  for (const c of changes.slice(0, MAX_ITEMS * MAX_SETS)) {
+    const weight = clean(c.weight, { max: 999 });
+    const set = items[c.item]?.exerciseId === c.exerciseId ? items[c.item].sets[c.set] : undefined;
+    if (weight === null || !set || set.weight_kg === null || set.weight_kg === undefined || weight <= set.weight_kg) continue;
+    set.weight_kg = weight;
+    updated++;
+  }
+  if (updated === 0) return { ok: true, updated: 0 };
+  const result = await saveMenuAction(menuId, { name: menu.name, items });
+  return { ok: result.ok, updated: result.ok ? updated : 0 };
 }
 
 export async function deleteMenuAction(menuId: string): Promise<{ ok: boolean; error?: string }> {

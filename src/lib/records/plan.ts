@@ -4,8 +4,11 @@ import { parseNumber, type Entry, type ExerciseType } from "./format.ts";
 /** done: 記録に残す / planned: メニューの予定でまだ未実施 / skipped: やらなかった（記録に残さない） */
 export type RowStatus = "done" | "planned" | "skipped";
 type Values = { weight: string; reps: string; duration: string; distance: string };
-/** fromPlan の行は plan に予定の値を持つ（「元に戻す」で予定に戻すため） */
-export type Row = Values & { status: RowStatus; fromPlan?: boolean; plan?: Values };
+/**
+ * fromPlan の行は plan に予定の値を持つ（「元に戻す」で予定に戻すため）。
+ * planRef はメニューのどの種目（item）の何セット目（set）か（完了時にメニューの重量を更新するため）
+ */
+export type Row = Values & { status: RowStatus; fromPlan?: boolean; plan?: Values; planRef?: { item: number; set: number } };
 export type Block = { key: number; exerciseId: string; name: string; type: ExerciseType; rows: Row[] };
 
 export const EMPTY_ROW: Row = { weight: "", reps: "", duration: "", distance: "", status: "done" };
@@ -52,11 +55,26 @@ export function menuToBlocks(
   items: { exerciseId: string; name: string; type: ExerciseType; sets: Partial<Entry>[] }[],
   nextKey: () => number,
 ): Block[] {
-  return items.map((it) => ({
+  return items.map((it, item) => ({
     key: nextKey(),
     exerciseId: it.exerciseId,
     name: it.name,
     type: it.type,
-    rows: it.sets.length ? it.sets.map((s) => entryToRow(s, "planned", true)) : [entryToRow({}, "planned", true)],
+    rows: (it.sets.length ? it.sets : [{}]).map((s, set) => ({ ...entryToRow(s, "planned", true), planRef: { item, set } })),
   }));
+}
+
+export type MenuWeightIncrease = { item: number; set: number; exerciseId: string; name: string; from: number; to: number };
+
+/** メニューの予定より重い重量で「できた」セット（完了時にメニューへ反映するか確認する） */
+export function menuWeightIncreases(blocks: Block[]): MenuWeightIncrease[] {
+  return blocks.flatMap((b) =>
+    b.rows.flatMap((r) => {
+      if (!r.fromPlan || !r.planRef || r.status !== "done" || b.type !== "weight") return [];
+      const from = parseNumber(r.plan?.weight ?? "", { max: 999 });
+      const to = parseNumber(r.weight, { max: 999 });
+      if (from === null || to === null || to <= from) return [];
+      return [{ item: r.planRef.item, set: r.planRef.set, exerciseId: b.exerciseId, name: b.name, from, to }];
+    }),
+  );
 }
