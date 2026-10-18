@@ -139,7 +139,7 @@ function PartSection({ part, parts, exercises, isFirst, isLast }: PartProps) {
       {adding ? (
         <ExerciseForm
           parts={parts}
-          initial={{ name: "", bodyPartId: part.id, type: "weight" }}
+          initial={{ name: "", bodyPartId: part.id, type: "weight", excludesBar: false }}
           submitLabel="追加"
           onCancel={() => setAdding(false)}
           onSubmit={(v) => run(() => addExerciseAction(v), "種目を追加しました", () => setAdding(false))}
@@ -165,7 +165,7 @@ function ExerciseRow({ exercise, parts, isFirst, isLast }: RowProps) {
       <li className="py-2">
         <ExerciseForm
           parts={parts}
-          initial={{ name: exercise.name, bodyPartId: exercise.bodyPartId ?? "", type: exercise.type }}
+          initial={{ name: exercise.name, bodyPartId: exercise.bodyPartId ?? "", type: exercise.type, excludesBar: exercise.excludesBar }}
           submitLabel="保存"
           typeNote="種目タイプを変えると、過去の記録の表示が変わることがあります"
           onCancel={() => setEditing(false)}
@@ -182,6 +182,7 @@ function ExerciseRow({ exercise, parts, isFirst, isLast }: RowProps) {
         <span className="block truncate text-sm">{exercise.name}</span>
         <span className="block text-xs text-muted">
           {TYPE_LABEL[exercise.type]}
+          {exercise.excludesBar && "・バー抜き"}
           {!exercise.active && "・非表示"}
         </span>
       </span>
@@ -212,7 +213,7 @@ function ExerciseRow({ exercise, parts, isFirst, isLast }: RowProps) {
   );
 }
 
-type FormValue = { name: string; bodyPartId: string; type: "weight" | "cardio" };
+type FormValue = { name: string; bodyPartId: string; type: "weight" | "cardio"; excludesBar: boolean };
 
 type FormProps = {
   parts: BodyPart[];
@@ -260,6 +261,12 @@ function ExerciseForm({ parts, initial, submitLabel, typeNote, onSubmit, onCance
           <option value="cardio">有酸素</option>
         </select>
       </div>
+      {value.type === "weight" && (
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={value.excludesBar} onChange={(e) => setValue({ ...value, excludesBar: e.target.checked })} />
+          バーの重さを除いて記録する（記録入力で「バー抜き」と表示）
+        </label>
+      )}
       {typeNote && value.type !== initial.type && <p className="text-xs text-warn">{typeNote}</p>}
       <div className="flex gap-2">
         <button type="button" onClick={onCancel} className="flex-1 rounded-lg border border-border py-2 text-sm">

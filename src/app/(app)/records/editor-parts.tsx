@@ -14,6 +14,7 @@ export function NumberInput({
   onChange,
   onBlur,
   decimal = false,
+  placeholder = "—",
 }: {
   label: string;
   unit: string;
@@ -21,6 +22,7 @@ export function NumberInput({
   onChange: (v: string) => void;
   onBlur?: () => void;
   decimal?: boolean;
+  placeholder?: string;
 }) {
   return (
     <label className="flex min-w-0 flex-1 items-center gap-1 rounded-lg border border-border px-2 focus-within:border-accent">
@@ -31,7 +33,7 @@ export function NumberInput({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onBlur={onBlur}
-        placeholder="—"
+        placeholder={placeholder}
         className="w-full min-w-0 bg-transparent py-2 text-right text-base outline-none"
       />
       <span className="text-sm text-muted">{unit}</span>
@@ -128,6 +130,7 @@ function CustomExerciseForm({ onCreated }: { onCreated: (ex: CatalogExercise) =>
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [type, setType] = useState<"weight" | "cardio">("weight");
+  const [excludesBar, setExcludesBar] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -146,9 +149,10 @@ function CustomExerciseForm({ onCreated }: { onCreated: (ex: CatalogExercise) =>
   const submit = () =>
     startTransition(async () => {
       setError(null);
-      const result = await createCustomExerciseAction(name, type);
+      const result = await createCustomExerciseAction(name, type, excludesBar);
       if (!result.ok) return setError(result.error);
       setName("");
+      setExcludesBar(false);
       setOpen(false);
       onCreated(result.exercise);
     });
@@ -182,6 +186,12 @@ function CustomExerciseForm({ onCreated }: { onCreated: (ex: CatalogExercise) =>
           </button>
         ))}
       </div>
+      {type === "weight" && (
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={excludesBar} onChange={(e) => setExcludesBar(e.target.checked)} />
+          バーの重さを除いて記録する
+        </label>
+      )}
       <p className="text-xs text-muted">自分専用の種目です。ほかのメンバーには見えず、ランキングにも数えません。</p>
       {error && <p className="text-sm text-danger">{error}</p>}
       <div className="flex gap-2">

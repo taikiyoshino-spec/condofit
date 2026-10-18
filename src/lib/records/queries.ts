@@ -97,7 +97,15 @@ export async function getSession(id: string): Promise<Session | null> {
 }
 
 /** bodyPartId が null の種目は自分専用（自由入力）の種目 */
-export type CatalogExercise = { id: string; name: string; type: ExerciseType; bodyPartId: string | null; custom: boolean };
+export type CatalogExercise = {
+  id: string;
+  name: string;
+  type: ExerciseType;
+  bodyPartId: string | null;
+  custom: boolean;
+  /** バーの重さを除いて記録する種目 */
+  excludesBar: boolean;
+};
 export type Catalog = {
   bodyParts: { id: string; name: string }[];
   exercises: CatalogExercise[];
@@ -110,7 +118,7 @@ export async function getCatalog(): Promise<Catalog> {
     supabase.from("body_parts").select("id, name").eq("active", true).order("display_order"),
     supabase
       .from("exercises")
-      .select("id, name, type, body_part_id, owner_user_id")
+      .select("id, name, type, body_part_id, owner_user_id, excludes_bar")
       .eq("active", true)
       .order("display_order")
       .order("name"),
@@ -125,6 +133,7 @@ export async function getCatalog(): Promise<Catalog> {
       type: e.type as ExerciseType,
       bodyPartId: (e.body_part_id as string | null) ?? null,
       custom: e.owner_user_id !== null,
+      excludesBar: Boolean(e.excludes_bar),
     })),
   };
 }

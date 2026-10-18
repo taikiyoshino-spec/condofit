@@ -16,6 +16,8 @@ export type Exercise = {
   bodyPartName: string;
   displayOrder: number;
   active: boolean;
+  /** バーの重さを除いて記録する種目 */
+  excludesBar: boolean;
 };
 
 type ExerciseRow = {
@@ -26,6 +28,7 @@ type ExerciseRow = {
   owner_user_id: string | null;
   display_order: number;
   active: boolean;
+  excludes_bar: boolean;
   body_parts: { name: string } | null;
 };
 
@@ -38,9 +41,10 @@ const toExercise = (r: ExerciseRow): Exercise => ({
   bodyPartName: r.body_parts?.name ?? "",
   displayOrder: r.display_order,
   active: r.active,
+  excludesBar: r.excludes_bar,
 });
 
-const EXERCISE_SELECT = "id, name, type, body_part_id, owner_user_id, display_order, active, body_parts(name)";
+const EXERCISE_SELECT = "id, name, type, body_part_id, owner_user_id, display_order, active, excludes_bar, body_parts(name)";
 
 /** 部位（管理画面では非表示も含める） */
 export async function listBodyParts({ includeHidden = false } = {}): Promise<BodyPart[]> {

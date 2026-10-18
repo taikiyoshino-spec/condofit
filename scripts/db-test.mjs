@@ -575,6 +575,21 @@ await test("自分専用の種目: 本人だけ見える・ランキングと最
   assert.equal(own[0].name, "ケトルベルスイング");
 });
 
+await test("バー抜きの種目: 自分の種目は本人だけ切り替えられる・マスタは管理者だけ", async () => {
+  const [{ id: mine }] = await as("C", "insert into exercises (name, type, owner_user_id) values ('ベンチプレス（自分）', 'weight', $1) returning id", [ids.C]);
+  assert.equal((await as("C", "select excludes_bar from exercises where id = $1", [mine]))[0].excludes_bar, false, "初期値はバー込み");
+  assert.equal((await as("C", "select set_my_exercise_excludes_bar($1, true) as ok", [mine]))[0].ok, true);
+  assert.equal((await as("C", "select excludes_bar from exercises where id = $1", [mine]))[0].excludes_bar, true);
+  // 他人の種目・マスタは関数では変えられない
+  assert.equal((await as("B", "select set_my_exercise_excludes_bar($1, false) as ok", [mine]))[0].ok, false);
+  assert.equal((await asSuper("select excludes_bar from exercises where id = $1", [mine]))[0].excludes_bar, true);
+  const [{ id: master }] = await asSuper("select id from exercises where owner_user_id is null and type = 'weight' limit 1");
+  assert.equal((await as("C", "select set_my_exercise_excludes_bar($1, true) as ok", [master]))[0].ok, false);
+  assert.equal((await as("C", "update exercises set excludes_bar = true where id = $1 returning id", [master])).length, 0, "メンバーはマスタを変更できない");
+  assert.equal((await as("A", "update exercises set excludes_bar = true where id = $1 returning id", [master])).length, 1, "管理者はマスタを変更できる");
+  await asSuper("update exercises set excludes_bar = false where id = $1", [master]);
+});
+
 await test("Fit訪問回数: 同じ日で3時間以内の記録は1回、3時間以上あけば別の来店", async () => {
   const visits = async (who) =>
     (await as("A", "select display_name, visits from monthly_ranking(jst_today())")).find((r) => r.display_name === who).visits;

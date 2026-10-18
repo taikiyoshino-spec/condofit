@@ -91,7 +91,7 @@ export async function moveBodyPartAction(id: string, direction: -1 | 1): Promise
 
 // ---- 種目 ----
 
-type ExerciseInput = { name: string; bodyPartId: string; type: string };
+type ExerciseInput = { name: string; bodyPartId: string; type: string; excludesBar?: boolean };
 
 function validateExercise(input: ExerciseInput) {
   const name = cleanName(input.name);
@@ -99,7 +99,8 @@ function validateExercise(input: ExerciseInput) {
   if (!UUID_RE.test(input.bodyPartId)) return { error: "部位を選んでください" };
   // MVPの種目タイプは重量系・有酸素の2種類のみ
   if (input.type !== "weight" && input.type !== "cardio") return { error: "種目タイプを選んでください" };
-  return { value: { name, body_part_id: input.bodyPartId, type: input.type } };
+  // バー抜きは重量系だけ
+  return { value: { name, body_part_id: input.bodyPartId, type: input.type, excludes_bar: input.type === "weight" && Boolean(input.excludesBar) } };
 }
 
 export async function addExerciseAction(input: ExerciseInput): Promise<MasterResult> {

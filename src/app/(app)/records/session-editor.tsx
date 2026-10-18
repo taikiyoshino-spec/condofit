@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { exerciseHistoryAction, finishSessionAction, saveSessionAction, type ExerciseHistoryResult } from "@/app/actions/records";
 import { HistorySheet } from "./history-sheet";
+import { setCustomExerciseExcludesBarAction } from "@/app/actions/custom-exercises";
 import { checkOutAction, verifyLocationAction } from "@/app/actions/checkin";
 import { BottomSheet } from "@/components/bottom-sheet";
 import { showToast } from "@/components/toaster";
@@ -116,6 +117,16 @@ export function SessionEditor({
   const [finishing, setFinishing] = useState(false);
   const [checkoutPrompt, setCheckoutPrompt] = useState(false);
   const [checkingOut, setCheckingOut] = useState(false);
+  // 種目ごとの「バーの重さを除いて記録する」と自分の種目か（入力中に作った・切り替えた分も反映）
+  const [exerciseInfo, setExerciseInfo] = useState(
+    () => new Map(catalog.exercises.map((e) => [e.id, { excludesBar: e.excludesBar, custom: e.custom }])),
+  );
+  const toggleExcludesBar = async (exerciseId: string) => {
+    const value = !exerciseInfo.get(exerciseId)?.excludesBar;
+    const result = await setCustomExerciseExcludesBarAction(exerciseId, value);
+    if (!result.ok) return showToast("設定を変更できませんでした");
+    setExerciseInfo((m) => new Map(m).set(exerciseId, { excludesBar: value, custom: true }));
+  };
   // 入力中にその種目の過去の記録を見るシート
   const [historyName, setHistoryName] = useState<string | null>(null);
   const [historyData, setHistoryData] = useState<ExerciseHistoryResult | null>(null);
@@ -247,6 +258,7 @@ export function SessionEditor({
   }, [flush]);
 
   const addExercise = (ex: CatalogExercise) => {
+    setExerciseInfo((m) => (m.has(ex.id) ? m : new Map(m).set(ex.id, { excludesBar: ex.excludesBar, custom: ex.custom })));
     setBlocks((list) => {
       // 同一セッション内で同じ種目を追加 → 直前に入力した値を初期値にする
       const sameInSession = [...list].reverse().find((b) => b.exerciseId === ex.id);
@@ -381,86 +393,105 @@ export function SessionEditor({
       )}
 
       <ol className="space-y-3">
-        {blocks.map((b, i) => (
-          <li key={b.key} className="mx-4 rounded-xl border border-border bg-surface p-4">
-            <div className="mb-2 flex items-center gap-1">
-              <span className="flex-1 font-semibold">{b.name}</span>
-              <button
-                type="button"
-                onClick={() => void openHistory(b.exerciseId, b.name)}
-                className="rounded-full border border-border px-2.5 py-0.5 text-xs text-muted"
-              >
-                履歴
-              </button>
-              <IconButton label="上へ" disabled={i === 0} onClick={() => move(i, -1)} path="M6 15l6-6 6 6" />
-              <IconButton label="下へ" disabled={i === blocks.length - 1} onClick={() => move(i, 1)} path="M6 9l6 6 6-6" />
-              <IconButton label={`${b.name}を削除`} onClick={() => update(b.key, () => null)} path="M6 6l12 12M18 6L6 18" />
-            </div>
+        {blocks.map((b, i) => {
+          const info = exerciseInfo.get(b.exerciseId);
+          const excludesBar = b.type === "weight" && Boolean(info?.excludesBar);
+          return (
+            <li key={b.key} className="mx-4 rounded-xl border border-border bg-surface p-4">
+              <div className="mb-2 flex items-center gap-1">
+                <span className="flex-1 font-semibold">{b.name}</span>
+                <button
+                  type="button"
+                  onClick={() => void openHistory(b.exerciseId, b.name)}
+                  className="rounded-full border border-border px-2.5 py-0.5 text-xs text-muted"
+                >
+                  履歴
+                </button>
+                <IconButton label="上へ" disabled={i === 0} onClick={() => move(i, -1)} path="M6 15l6-6 6 6" />
+                <IconButton label="下へ" disabled={i === blocks.length - 1} onClick={() => move(i, 1)} path="M6 9l6 6 6-6" />
+                <IconButton label={`${b.name}を削除`} onClick={() => update(b.key, () => null)} path="M6 6l12 12M18 6L6 18" />
+              </div>
+              {excludesBar && <p className="-mt-1 mb-2 text-xs font-medium text-warn">重さはバーの重さを除いて入力（バー抜き）</p>}
 
-            <ul className="space-y-2">
-              {b.rows.map((r, j) => {
-                if (r.fromPlan && r.status !== "done") {
+              <ul className="space-y-2">
+                {b.rows.map((r, j) => {
+                  if (r.fromPlan && r.status !== "done") {
+                    return (
+                      <li key={j}>
+                        <PlanRow
+                          type={b.type}
+                          row={r}
+                          setNumber={j + 1}
+                          onDone={(values) => markDone(b.key, j, values)}
+                          onSkip={() => markSkipped(b.key, j)}
+                          onUndo={() => backToPlan(b.key, j)}
+                        />
+                      </li>
+                    );
+                  }
                   return (
-                    <li key={j}>
-                      <PlanRow
-                        type={b.type}
-                        row={r}
-                        setNumber={j + 1}
-                        onDone={(values) => markDone(b.key, j, values)}
-                        onSkip={() => markSkipped(b.key, j)}
-                        onUndo={() => backToPlan(b.key, j)}
+                    <li key={j} className="flex items-center gap-2">
+                      {r.fromPlan && (
+                        <button
+                          type="button"
+                          onClick={() => backToPlan(b.key, j)}
+                          aria-label="予定に戻す"
+                          title="予定に戻す"
+                          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-bold text-accent-fg"
+                        >
+                          ✓
+                        </button>
+                      )}
+                      {b.type === "weight" ? (
+                        <>
+                          <NumberInput
+                            label={excludesBar ? "重量（バー抜き）" : "重量"}
+                            unit="kg"
+                            value={r.weight}
+                            onChange={(v) => setField(b.key, j, "weight", v)}
+                            onBlur={flush}
+                            decimal
+                            placeholder={excludesBar ? "バー抜き" : undefined}
+                          />
+                          <span className="text-muted" aria-hidden>×</span>
+                          <NumberInput label="回数" unit="回" value={r.reps} onChange={(v) => setField(b.key, j, "reps", v)} onBlur={flush} />
+                        </>
+                      ) : (
+                        <>
+                          <CardioInputs
+                            duration={r.duration}
+                            distance={r.distance}
+                            onChange={(v) => setFields(b.key, j, v)}
+                            onBlur={flush}
+                          />
+                        </>
+                      )}
+                      <IconButton
+                        label="この行を削除"
+                        disabled={b.rows.length === 1}
+                        onClick={() => update(b.key, (blk) => ({ ...blk, rows: blk.rows.filter((_, k) => k !== j) }))}
+                        path="M6 12h12"
                       />
                     </li>
                   );
-                }
-                return (
-                  <li key={j} className="flex items-center gap-2">
-                    {r.fromPlan && (
-                      <button
-                        type="button"
-                        onClick={() => backToPlan(b.key, j)}
-                        aria-label="予定に戻す"
-                        title="予定に戻す"
-                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-bold text-accent-fg"
-                      >
-                        ✓
-                      </button>
-                    )}
-                    {b.type === "weight" ? (
-                      <>
-                        <NumberInput label="重量" unit="kg" value={r.weight} onChange={(v) => setField(b.key, j, "weight", v)} onBlur={flush} decimal />
-                        <span className="text-muted" aria-hidden>×</span>
-                        <NumberInput label="回数" unit="回" value={r.reps} onChange={(v) => setField(b.key, j, "reps", v)} onBlur={flush} />
-                      </>
-                    ) : (
-                      <>
-                        <CardioInputs
-                          duration={r.duration}
-                          distance={r.distance}
-                          onChange={(v) => setFields(b.key, j, v)}
-                          onBlur={flush}
-                        />
-                      </>
-                    )}
-                    <IconButton
-                      label="この行を削除"
-                      disabled={b.rows.length === 1}
-                      onClick={() => update(b.key, (blk) => ({ ...blk, rows: blk.rows.filter((_, k) => k !== j) }))}
-                      path="M6 12h12"
-                    />
-                  </li>
-                );
-              })}
-            </ul>
-            <button
-              type="button"
-              onClick={() => update(b.key, (blk) => ({ ...blk, rows: [...blk.rows, asManualRow(blk.rows[blk.rows.length - 1])] }))}
-              className="mt-2 text-sm text-accent"
-            >
-              ＋ 同じ種目をもう1セット
-            </button>
-          </li>
-        ))}
+                })}
+              </ul>
+              <button
+                type="button"
+                onClick={() => update(b.key, (blk) => ({ ...blk, rows: [...blk.rows, asManualRow(blk.rows[blk.rows.length - 1])] }))}
+                className="mt-2 text-sm text-accent"
+              >
+                ＋ 同じ種目をもう1セット
+              </button>
+              {b.type === "weight" && info?.custom && (
+                <label className="mt-2 flex items-center gap-2 text-xs text-muted">
+                  <input type="checkbox" checked={excludesBar} onChange={() => void toggleExcludesBar(b.exerciseId)} />
+                  この種目はバーの重さを除いて記録する
+                </label>
+              )}
+            </li>
+          );
+        })}
       </ol>
 
       <div className="mx-4 mt-3">
