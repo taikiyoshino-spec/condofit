@@ -1,4 +1,5 @@
 import { colorFor } from "@/lib/avatar";
+import { recipePhotoUrl } from "@/lib/cook/photo";
 
 /** レシピのサムネイル（低画質の縮小画像。写真がなければ料理名の頭文字） */
 export function RecipeThumb({
@@ -14,12 +15,10 @@ export function RecipeThumb({
 }) {
   const style = { width: size, height: size };
   if (thumbPath) {
-    // 一覧用の小さな画像（パスが変われば URL も変わるので長くキャッシュできる）
-    const v = thumbPath.split("/").pop()?.split(".")[0] ?? "";
     return (
       // eslint-disable-next-line @next/next/no-img-element -- 認証付きの配信なので next/image の最適化は使わない
       <img
-        src={`/api/cook/photo/${recipeId}?size=thumb&v=${v}`}
+        src={recipePhotoUrl(recipeId, thumbPath, "thumb")}
         alt=""
         loading="lazy"
         style={style}

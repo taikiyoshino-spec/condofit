@@ -1,15 +1,28 @@
 import { requireCookUser } from "@/lib/auth/session";
-import { PageHeader, Section } from "@/components/page";
+import { getRecipe, listCategories, listIngredients } from "@/lib/cook/queries";
+import { PageHeader } from "@/components/page";
+import { RecipeEditor } from "../recipe-editor";
 
-// 1a の実装途中の仮ページ（登録画面は次の段階で作る。docs/CONDOCOOK_1A_DESIGN.md 8章）
-export default async function NewRecipePage() {
+const UUID_RE = /^[0-9a-f-]{36}$/i;
+
+/** レシピの登録（手入力）。?copy=<id> で見えるレシピをコピーしてアレンジ */
+export default async function NewRecipePage({ searchParams }: PageProps<"/cook/new">) {
   await requireCookUser();
+  const { copy } = await searchParams;
+  const [categories, ingredients, copyFrom] = await Promise.all([
+    listCategories(),
+    listIngredients(),
+    typeof copy === "string" && UUID_RE.test(copy) ? getRecipe(copy) : Promise.resolve(null),
+  ]);
   return (
     <>
-      <PageHeader title="レシピを登録" />
-      <Section>
-        <p className="text-sm text-muted">レシピの登録画面は準備中です。もうしばらくお待ちください。</p>
-      </Section>
+      <PageHeader title={copyFrom ? "コピーしてアレンジ" : "レシピを登録"} back={copyFrom ? `/cook/r/${copyFrom.id}` : undefined} />
+      {!copyFrom && (
+        <div className="mx-4 mb-4 rounded-xl border border-dashed border-border p-3 text-sm text-muted">
+          レシピサイトのURLから取り込む機能は準備中です。いまは手入力で登録できます。
+        </div>
+      )}
+      <RecipeEditor mode="new" recipe={null} copyFrom={copyFrom} categories={categories} ingredients={ingredients} />
     </>
   );
 }

@@ -143,3 +143,18 @@ export async function myHouseholdMemberIds(): Promise<string[]> {
 export async function myHouseholdSize(): Promise<number> {
   return Math.max(1, (await myHouseholdMemberIds()).length);
 }
+
+export type IngredientOption = { id: string; name: string; reading: string; aliases: string[] };
+
+/** 食材マスタ（統合済み・非表示を除く）。材料名の候補出しと当てはめに使う */
+export async function listIngredients(): Promise<IngredientOption[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("ingredients")
+    .select("id, name, reading, aliases")
+    .eq("active", true)
+    .is("merged_into", null)
+    .order("reading");
+  if (error) throw error;
+  return data.map((i) => ({ id: i.id as string, name: i.name as string, reading: i.reading as string, aliases: (i.aliases as string[]) ?? [] }));
+}

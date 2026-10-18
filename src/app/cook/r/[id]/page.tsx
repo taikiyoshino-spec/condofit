@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { requireCookUser } from "@/lib/auth/session";
 import { getRecipe, listCategories, myHouseholdSize } from "@/lib/cook/queries";
 import { PageHeader } from "@/components/page";
+import { recipePhotoUrl } from "@/lib/cook/photo";
 import { Owner } from "../../owner";
 import { IngredientList } from "./ingredient-list";
 import { DeleteRecipeButton } from "./delete-button";
@@ -25,7 +26,7 @@ export default async function RecipePage({ params }: PageProps<"/cook/r/[id]">) 
       {recipe.photoPath && (
         // eslint-disable-next-line @next/next/no-img-element -- 認証付きの配信なので next/image の最適化は使わない
         <img
-          src={`/api/cook/photo/${recipe.id}?size=full&v=${recipe.photoPath.split("/").pop()?.split(".")[0] ?? ""}`}
+          src={recipePhotoUrl(recipe.id, recipe.photoPath, "full")}
           alt=""
           className="mb-3 aspect-[4/3] w-full bg-border object-cover"
         />
@@ -57,6 +58,17 @@ export default async function RecipePage({ params }: PageProps<"/cook/r/[id]">) 
             </a>
           </p>
         )}
+        <div className="mt-3 flex gap-2 text-sm">
+          {isOwner ? (
+            <Link href={`/cook/r/${recipe.id}/edit`} className="rounded-full border border-border px-4 py-1.5">
+              編集
+            </Link>
+          ) : (
+            <Link href={`/cook/new?copy=${recipe.id}`} className="rounded-full border border-border px-4 py-1.5">
+              コピーしてアレンジ
+            </Link>
+          )}
+        </div>
       </header>
 
       <IngredientList ingredients={recipe.ingredients} servings={recipe.servings} initialServings={recipe.servings ? householdSize : null} />

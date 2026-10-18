@@ -1,0 +1,472 @@
+"use client";
+
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { saveRecipeAction, type RecipeInput, type Visibility } from "@/app/actions/cook-recipes";
+import { removeRecipePhotoAction, uploadRecipePhotoAction } from "@/app/actions/cook-photos";
+import { showToast } from "@/components/toaster";
+import { resizeToJpeg } from "@/lib/client/resize-image";
+import { ingredientsToRows, parseTags, rowsToIngredients, type EditorItem, type EditorRow } from "@/lib/cook/editor";
+import { matchIngredient, searchIngredients } from "@/lib/cook/ingredients";
+import { PHOTO_FULL_SIDE, PHOTO_THUMB_SIDE, recipePhotoUrl } from "@/lib/cook/photo";
+import type { Category, IngredientOption, RecipeDetail } from "@/lib/cook/queries";
+
+let nextKey = 1;
+const newKey = () => nextKey++;
+const DRAFT_KEY = "condocook:draft:new";
+
+const VISIBILITIES: { value: Visibility; label: string; note: string }[] = [
+  { value: "group", label: "グループ", note: "仲間全員に見える" },
+  { value: "household", label: "家族だけ", note: "同じ家族だけ" },
+  { value: "private", label: "自分だけ", note: "下書き・メモに" },
+];
+
+type Form = {
+  title: string;
+  visibility: Visibility;
+  servings: string;
+  cookMinutes: string;
+  categoryId: string;
+  tags: string;
+  memo: string;
+  sourceUrl: string;
+  sourceName: string;
+  rows: EditorRow[];
+  steps: { key: number; body: string }[];
+};
+
+const emptyItem = (): EditorItem => ({ key: newKey(), kind: "item", ingredientId: null, name: "", amount: "", optional: false });
+
+function fromRecipe(r: RecipeDetail | null): Form {
+  return {
+    title: r?.title ?? "",
+    visibility: r?.visibility ?? "group",
+    servings: r?.servings ? String(r.servings) : "",
+    cookMinutes: r?.cookMinutes ? String(r.cookMinutes) : "",
+    categoryId: r?.categoryId ?? "",
+    tags: r?.tags.join("、") ?? "",
+    memo: r?.memo ?? "",
+    sourceUrl: r?.sourceUrl ?? "",
+    sourceName: r?.sourceName ?? "",
+    rows: r ? ingredientsToRows(r.ingredients, newKey) : [emptyItem(), emptyItem(), emptyItem()],
+    steps: (r?.steps.length ? r.steps : ["", ""]).map((body) => ({ key: newKey(), body })),
+  };
+}
+
+function loadDraft(): Form | null {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if (!raw) return null;
+    const f = JSON.parse(raw) as Form;
+    // 行のキーは振り直す（この画面の中でだけ一意であればよい）
+    return { ...f, rows: f.rows.map((r) => ({ ...r, key: newKey() })), steps: f.steps.map((s) => ({ ...s, key: newKey() })) };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * レシピの登録・編集（手入力）。
+ * - mode=edit: 自分のレシピを編集 / mode=new: 新規（copyFrom があればコピーしてアレンジ）
+ * - 新規の入力は端末に下書きとして残す（アプリを閉じても消えない）
+ */
+export function RecipeEditor({
+  mode,
+  recipe,
+  copyFrom,
+  categories,
+  ingredients,
+}: {
+  mode: "new" | "edit";
+  recipe: RecipeDetail | null;
+  copyFrom?: RecipeDetail | null;
+  categories: Category[];
+  ingredients: IngredientOption[];
+}) {
+  const router = useRouter();
+  const [form, setForm] = useState<Form>(() => {
+    if (copyFrom) return { ...fromRecipe(copyFrom), title: `${copyFrom.title}（アレンジ）`.slice(0, 60), visibility: "group" };
+    return fromRecipe(recipe);
+  });
+  const [draftRestored, setDraftRestored] = useState(false);
+  const [photo, setPhoto] = useState<{ full: Blob; thumb: Blob; preview: string } | null>(null);
+  const [removePhoto, setRemovePhoto] = useState(false);
+  const [focusedRow, setFocusedRow] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const useDraft = mode === "new" && !copyFrom;
+
+  // 新規: 前回の下書きがあれば続きから
+  useEffect(() => {
+    if (!useDraft) return;
+    const t = setTimeout(() => {
+      const draft = loadDraft();
+      if (draft && (draft.title || draft.rows.some((r) => r.name) || draft.steps.some((s) => s.body))) {
+        setForm(draft);
+        setDraftRestored(true);
+      }
+    }, 0);
+    return () => clearTimeout(t);
+  }, [useDraft]);
+
+  // 新規: 入力のたびに下書きを保存（写真は保存しない）
+  useEffect(() => {
+    if (!useDraft) return;
+    const t = setTimeout(() => {
+      try {
+        localStorage.setItem(DRAFT_KEY, JSON.stringify(form));
+      } catch {
+        // 保存できなくても入力は続けられる
+      }
+    }, 500);
+    return () => clearTimeout(t);
+  }, [form, useDraft]);
+
+  useEffect(() => () => void (photo && URL.revokeObjectURL(photo.preview)), [photo]);
+
+  const set = <K extends keyof Form>(key: K, value: Form[K]) => setForm((f) => ({ ...f, [key]: value }));
+  const setRow = (key: number, patch: Partial<EditorItem> | { name: string }) =>
+    setForm((f) => ({ ...f, rows: f.rows.map((r) => (r.key === key ? ({ ...r, ...patch } as EditorRow) : r)) }));
+  const moveIn = <T,>(list: T[], i: number, d: number) => {
+    const to = i + d;
+    if (to < 0 || to >= list.length) return list;
+    const next = [...list];
+    [next[i], next[to]] = [next[to], next[i]];
+    return next;
+  };
+
+  const pickPhoto = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      const [full, thumb] = await Promise.all([resizeToJpeg(file, PHOTO_FULL_SIDE, 0.82), resizeToJpeg(file, PHOTO_THUMB_SIDE, 0.6)]);
+      setPhoto({ full, thumb, preview: URL.createObjectURL(full) });
+      setRemovePhoto(false);
+    } catch {
+      showToast("写真を読み込めませんでした");
+    }
+  };
+
+  const clearDraft = () => {
+    try {
+      localStorage.removeItem(DRAFT_KEY);
+    } catch {
+      // 何もしない
+    }
+  };
+
+  const save = () =>
+    startTransition(async () => {
+      setError(null);
+      // 食材マスタに名前が一致する材料は自動でつなぐ（候補から選ばなかった場合も）
+      const rows = form.rows.map((r) =>
+        r.kind === "item" && !r.ingredientId && r.name.trim() ? { ...r, ingredientId: matchIngredient(r.name, ingredients)?.id ?? null } : r,
+      );
+      const input: RecipeInput = {
+        title: form.title,
+        visibility: form.visibility,
+        servings: form.servings ? Number(form.servings) : null,
+        cookMinutes: form.cookMinutes ? Number(form.cookMinutes) : null,
+        categoryId: form.categoryId || null,
+        tags: parseTags(form.tags),
+        memo: form.memo,
+        sourceUrl: form.sourceUrl,
+        sourceName: form.sourceName,
+        copiedFrom: copyFrom?.id ?? null,
+        ingredients: rowsToIngredients(rows).map((i) => ({ ...i, section: i.section ?? "" })),
+        steps: form.steps.map((s) => s.body),
+      };
+      const result = await saveRecipeAction(mode === "edit" && recipe ? recipe.id : null, input);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      if (photo) {
+        const fd = new FormData();
+        fd.set("full", photo.full, "full.jpg");
+        fd.set("thumb", photo.thumb, "thumb.jpg");
+        const r = await uploadRecipePhotoAction(result.id, fd);
+        if (!r.ok) showToast(`レシピは保存しました。${r.error}`);
+      } else if (removePhoto && recipe?.photoPath) {
+        await removeRecipePhotoAction(result.id);
+      }
+      if (useDraft) clearDraft();
+      showToast(mode === "edit" ? "レシピを保存しました" : "レシピを登録しました");
+      router.push(`/cook/r/${result.id}`);
+      router.refresh();
+    });
+
+  const currentPhoto = photo?.preview ?? (!removePhoto && recipe?.photoPath ? recipePhotoUrl(recipe.id, recipe.photoPath, "full") : null);
+  const suggestions = useMemo(() => {
+    const row = form.rows.find((r) => r.key === focusedRow);
+    if (!row || row.kind !== "item" || !row.name.trim() || row.ingredientId) return [];
+    return searchIngredients(row.name, ingredients, 6);
+  }, [focusedRow, form.rows, ingredients]);
+
+  const input = "w-full rounded-lg border border-border bg-surface px-3 py-2 text-base";
+
+  return (
+    <div className="space-y-4 pb-40">
+      {draftRestored && (
+        <div className="mx-4 flex items-center justify-between rounded-lg border border-border bg-surface px-3 py-2 text-sm">
+          <span className="text-muted">前回の入力の続きです</span>
+          <button
+            type="button"
+            onClick={() => {
+              clearDraft();
+              setForm(fromRecipe(null));
+              setDraftRestored(false);
+            }}
+            className="text-accent"
+          >
+            最初から
+          </button>
+        </div>
+      )}
+      {copyFrom && <p className="mx-4 text-sm text-muted">「{copyFrom.title}」をコピーしました。自分用に直して登録してください（元のレシピは変わりません）。</p>}
+
+      <section className="mx-4 space-y-3 rounded-xl border border-border bg-surface p-4">
+        <label className="block space-y-1">
+          <span className="text-sm font-medium">料理名</span>
+          <input value={form.title} onChange={(e) => set("title", e.target.value)} maxLength={60} className={input} placeholder="例：親子丼" />
+        </label>
+
+        <div className="space-y-1">
+          <span className="text-sm font-medium">完成写真（自分で撮ったもの）</span>
+          {currentPhoto ? (
+            <div className="relative">
+              {/* eslint-disable-next-line @next/next/no-img-element -- 端末内のプレビュー・認証付きの配信 */}
+              <img src={currentPhoto} alt="" className="aspect-[4/3] w-full rounded-lg bg-border object-cover" />
+              <div className="mt-1 flex gap-3 text-sm">
+                <button type="button" onClick={() => fileRef.current?.click()} className="text-accent">
+                  写真を変える
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPhoto(null);
+                    setRemovePhoto(true);
+                  }}
+                  className="text-muted"
+                >
+                  写真を外す
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              className="flex aspect-[4/3] w-full items-center justify-center rounded-lg border border-dashed border-border text-sm text-muted"
+            >
+              ＋ 写真を選ぶ（なくても登録できます）
+            </button>
+          )}
+          <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => void pickPhoto(e.target.files?.[0])} />
+        </div>
+
+        <div className="space-y-1">
+          <span className="text-sm font-medium">公開範囲</span>
+          <div className="grid grid-cols-3 gap-2" role="radiogroup" aria-label="公開範囲">
+            {VISIBILITIES.map((v) => (
+              <button
+                key={v.value}
+                type="button"
+                role="radio"
+                aria-checked={form.visibility === v.value}
+                onClick={() => set("visibility", v.value)}
+                className={`rounded-lg px-1 py-2 text-sm ${form.visibility === v.value ? "border-2 border-accent font-medium" : "border border-border"}`}
+              >
+                {v.label}
+                <span className="block text-[10px] font-normal text-muted">{v.note}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-2">
+          <label className="block space-y-1">
+            <span className="text-sm font-medium">何人分</span>
+            <input value={form.servings} onChange={(e) => set("servings", e.target.value.replace(/\D/g, ""))} inputMode="numeric" className={input} placeholder="2" />
+          </label>
+          <label className="block space-y-1">
+            <span className="text-sm font-medium">時間（分）</span>
+            <input value={form.cookMinutes} onChange={(e) => set("cookMinutes", e.target.value.replace(/\D/g, ""))} inputMode="numeric" className={input} placeholder="20" />
+          </label>
+          <label className="block space-y-1">
+            <span className="text-sm font-medium">カテゴリ</span>
+            <select value={form.categoryId} onChange={(e) => set("categoryId", e.target.value)} className={`${input} px-2`}>
+              <option value="">—</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <label className="block space-y-1">
+          <span className="text-sm font-medium">タグ（「、」区切り）</span>
+          <input value={form.tags} onChange={(e) => set("tags", e.target.value)} className={input} placeholder="例：簡単、作り置き" />
+        </label>
+      </section>
+
+      <section className="mx-4 rounded-xl border border-border bg-surface p-4">
+        <h2 className="mb-1 font-semibold">材料</h2>
+        <p className="mb-2 text-xs text-muted">分量は「200g」「大さじ2」「少々」のように。何人分を入れると、見る人の人数に合わせて換算されます。</p>
+        <ul className="space-y-2">
+          {form.rows.map((r, i) =>
+            r.kind === "heading" ? (
+              <li key={r.key} className="flex items-center gap-1">
+                <input
+                  value={r.name}
+                  onChange={(e) => setRow(r.key, { name: e.target.value })}
+                  maxLength={20}
+                  placeholder="見出し（例：タレ）。空欄でまとまりを終える"
+                  aria-label="材料の見出し"
+                  className="min-w-0 flex-1 rounded-lg border border-accent bg-surface px-3 py-1.5 text-sm font-semibold text-accent"
+                />
+                <RowButtons onUp={() => set("rows", moveIn(form.rows, i, -1))} onDown={() => set("rows", moveIn(form.rows, i, 1))} onDelete={() => set("rows", form.rows.filter((x) => x.key !== r.key))} />
+              </li>
+            ) : (
+              <li key={r.key} className="rounded-lg border border-border p-2">
+                <div className="flex items-center gap-1">
+                  <div className="relative min-w-0 flex-[3]">
+                    <input
+                      value={r.name}
+                      onChange={(e) => setRow(r.key, { name: e.target.value, ingredientId: null })}
+                      onFocus={() => setFocusedRow(r.key)}
+                      onBlur={() => setTimeout(() => setFocusedRow((k) => (k === r.key ? null : k)), 150)}
+                      maxLength={60}
+                      placeholder="材料（例：とりもも）"
+                      aria-label="材料名"
+                      className="w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-base"
+                    />
+                    {r.ingredientId && <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-accent" title="食材とつながっています">✓</span>}
+                  </div>
+                  <input
+                    value={r.amount}
+                    onChange={(e) => setRow(r.key, { amount: e.target.value })}
+                    maxLength={30}
+                    placeholder="分量"
+                    aria-label="分量"
+                    className="min-w-0 flex-[2] rounded-lg border border-border bg-surface px-2 py-1.5 text-base"
+                  />
+                </div>
+                {focusedRow === r.key && suggestions.length > 0 && (
+                  <ul className="mt-1 flex flex-wrap gap-1" aria-label="食材の候補">
+                    {suggestions.map((s) => (
+                      <li key={s.id}>
+                        <button
+                          type="button"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => {
+                            setRow(r.key, { name: s.name, ingredientId: s.id });
+                            setFocusedRow(null);
+                          }}
+                          className="rounded-full border border-accent px-2.5 py-1 text-xs text-accent"
+                        >
+                          {s.name}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <div className="mt-1 flex items-center justify-between">
+                  <label className="flex items-center gap-1.5 text-xs text-muted">
+                    <input type="checkbox" checked={r.optional} onChange={(e) => setRow(r.key, { optional: e.target.checked })} />
+                    なくても可
+                  </label>
+                  <RowButtons onUp={() => set("rows", moveIn(form.rows, i, -1))} onDown={() => set("rows", moveIn(form.rows, i, 1))} onDelete={() => set("rows", form.rows.filter((x) => x.key !== r.key))} />
+                </div>
+              </li>
+            ),
+          )}
+        </ul>
+        <div className="mt-2 flex gap-4 text-sm">
+          <button type="button" onClick={() => set("rows", [...form.rows, emptyItem()])} className="text-accent">
+            ＋ 材料
+          </button>
+          <button type="button" onClick={() => set("rows", [...form.rows, { key: newKey(), kind: "heading", name: "" }])} className="text-accent">
+            ＋ 見出し（タレなど）
+          </button>
+        </div>
+      </section>
+
+      <section className="mx-4 rounded-xl border border-border bg-surface p-4">
+        <h2 className="mb-2 font-semibold">作り方</h2>
+        <ol className="space-y-2">
+          {form.steps.map((s, i) => (
+            <li key={s.key} className="flex gap-2">
+              <span className="mt-1.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-bold text-accent-fg">{i + 1}</span>
+              <div className="min-w-0 flex-1">
+                <textarea
+                  value={s.body}
+                  onChange={(e) => set("steps", form.steps.map((x) => (x.key === s.key ? { ...x, body: e.target.value } : x)))}
+                  rows={2}
+                  maxLength={500}
+                  aria-label={`手順${i + 1}`}
+                  placeholder={i === 0 ? "例：鶏肉をひと口大に切る" : ""}
+                  className="w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-base"
+                />
+                <div className="flex justify-end">
+                  <RowButtons onUp={() => set("steps", moveIn(form.steps, i, -1))} onDown={() => set("steps", moveIn(form.steps, i, 1))} onDelete={() => set("steps", form.steps.filter((x) => x.key !== s.key))} />
+                </div>
+              </div>
+            </li>
+          ))}
+        </ol>
+        <button type="button" onClick={() => set("steps", [...form.steps, { key: newKey(), body: "" }])} className="mt-1 text-sm text-accent">
+          ＋ 手順
+        </button>
+        <p className="mt-2 text-xs text-muted">「5分煮る」のように時間を書くと、作るときにタイマーを出せます。</p>
+      </section>
+
+      <section className="mx-4 space-y-3 rounded-xl border border-border bg-surface p-4">
+        <label className="block space-y-1">
+          <span className="text-sm font-medium">メモ・コツ（仲間へのひとことも）</span>
+          <textarea value={form.memo} onChange={(e) => set("memo", e.target.value)} rows={3} maxLength={1000} className={input} />
+        </label>
+        <label className="block space-y-1">
+          <span className="text-sm font-medium">元のレシピのURL（あれば）</span>
+          <input value={form.sourceUrl} onChange={(e) => set("sourceUrl", e.target.value)} inputMode="url" className={input} placeholder="https://" />
+        </label>
+        {form.sourceUrl && (
+          <label className="block space-y-1">
+            <span className="text-sm font-medium">サイト名・出典</span>
+            <input value={form.sourceName} onChange={(e) => set("sourceName", e.target.value)} maxLength={60} className={input} />
+          </label>
+        )}
+      </section>
+
+      <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-10 mx-auto max-w-lg px-4 pb-2">
+        {error && <p className="mb-2 rounded-lg bg-surface px-3 py-2 text-sm text-danger shadow">{error}</p>}
+        <button
+          type="button"
+          onClick={save}
+          disabled={pending}
+          className="w-full rounded-xl bg-accent py-3 font-semibold text-accent-fg shadow-lg disabled:opacity-50"
+        >
+          {pending ? "保存中…" : mode === "edit" ? "保存する" : "登録する"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function RowButtons({ onUp, onDown, onDelete }: { onUp: () => void; onDown: () => void; onDelete: () => void }) {
+  const cls = "rounded px-1.5 py-0.5 text-sm text-muted";
+  return (
+    <span className="flex shrink-0 items-center">
+      <button type="button" aria-label="上へ" onClick={onUp} className={cls}>
+        ↑
+      </button>
+      <button type="button" aria-label="下へ" onClick={onDown} className={cls}>
+        ↓
+      </button>
+      <button type="button" aria-label="削除" onClick={onDelete} className={cls}>
+        ×
+      </button>
+    </span>
+  );
+}

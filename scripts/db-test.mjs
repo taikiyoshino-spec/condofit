@@ -780,4 +780,14 @@ await test("レシピ: 削除は作成者と管理者（論理削除で見えな
   await rejects(() => asE("insert into recipe_categories (name) values ('x')"), /row-level security/);
 });
 
+await test("レシピの写真: 非公開バケット（2MBまで・画像のみ）", async () => {
+  const [bucket] = await asSuper("select public, file_size_limit, allowed_mime_types from storage.buckets where id = 'recipe-photos'");
+  assert.equal(bucket.public, false);
+  assert.equal(Number(bucket.file_size_limit), 2 * 1024 * 1024);
+  assert.deepEqual(bucket.allowed_mime_types, ["image/jpeg", "image/png", "image/webp"]);
+  // 写真のパスは利用者が直接書き換えられない（サーバー経由のみ）
+  const [{ id }] = await asE("select save_recipe(null, $1::jsonb) id", [recipeJson()]);
+  await rejects(() => asE("update recipes set photo_path = 'x' where id = $1", [id]), /permission denied/);
+});
+
 console.log(`\n${passed} passed${process.exitCode ? ", some FAILED" : ""}`);
