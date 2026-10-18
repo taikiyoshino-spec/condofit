@@ -683,4 +683,31 @@ await test("家族: 入っていなければ1人の家族を作る・1人1家族
   await rejects(() => asSuper("insert into household_members (user_id, household_id) values ($1, $2)", [ids.C, hE]), /duplicate key/);
 });
 
+await test("食材マスタ: 初期データ約300件・別名が他の食材名とかぶらない", async () => {
+  const [{ n }] = await asSuper("select count(*)::int n from ingredients");
+  assert.ok(n >= 300, `${n}件`);
+  // 別名が別の食材の名前・別名と同じだと当てはめが曖昧になる
+  const clash = await asSuper(`
+    with k as (
+      select id, lower(name) k from ingredients
+      union all select id, lower(unnest(aliases)) from ingredients
+    )
+    select a.k from k a join k b on a.k = b.k and a.id <> b.id limit 5`);
+  assert.deepEqual(clash.map((r) => r.k), []);
+  const [{ staples }] = await asSuper("select count(*)::int staples from ingredients where is_staple");
+  assert.ok(staples >= 10);
+});
+
+await test("食材マスタ: 家族も読める・追加は自分名義で・変更は管理者だけ", async () => {
+  assert.ok((await asE("select id from ingredients")).length >= 300);
+  assert.equal((await as("D", "select id from ingredients")).length, 0, "グループ外は見えない");
+  const [{ id }] = await asE("insert into ingredients (name, reading, category, created_by) values ('ケール', 'けーる', '野菜', $1) returning id", [idE]);
+  await rejects(() => asE("insert into ingredients (name, created_by) values ('なりすまし', $1)", [ids.B]), /row-level security/);
+  await rejects(() => asE("insert into ingredients (name, fridge_days, created_by) values ('日数付き', 3, $1)", [idE]), /permission denied/);
+  await rejects(() => asE("insert into ingredients (name, created_by) values ('ケール', $1)", [idE]), /duplicate key/);
+  assert.equal((await asE("update ingredients set name = 'x' where id = $1 returning id", [id])).length, 0, "家族は変更できない");
+  assert.equal((await as("C", "update ingredients set fridge_days = 5 where id = $1 returning id", [id])).length, 0, "メンバーも変更できない");
+  assert.equal((await as("A", "update ingredients set fridge_days = 5, aliases = '{カーリーケール}' where id = $1 returning id", [id])).length, 1, "管理者は変更できる");
+});
+
 console.log(`\n${passed} passed${process.exitCode ? ", some FAILED" : ""}`);
