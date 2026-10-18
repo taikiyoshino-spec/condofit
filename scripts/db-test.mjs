@@ -710,4 +710,74 @@ await test("食材マスタ: 家族も読める・追加は自分名義で・変
   assert.equal((await as("A", "update ingredients set fridge_days = 5, aliases = '{カーリーケール}' where id = $1 returning id", [id])).length, 1, "管理者は変更できる");
 });
 
+const recipeJson = (over = {}) =>
+  JSON.stringify({
+    title: "親子丼",
+    servings: 2,
+    cook_minutes: 20,
+    tags: ["丼", " ", "簡単"],
+    ingredients: [
+      { name: "鶏もも肉", amount: "200g", quantity: 200, unit: "g" },
+      { name: "卵", amount: "3個", quantity: 3, unit: "個" },
+      { name: "三つ葉", amount: "適量", optional: true },
+    ],
+    steps: [{ body: "鶏肉を切る" }, { body: "煮る" }],
+    ...over,
+  });
+
+await test("レシピ: 保存・編集は作成者だけ・材料と手順をまとめて置き換え", async () => {
+  const [{ id }] = await asE("select save_recipe(null, $1::jsonb) id", [recipeJson()]);
+  const [r] = await asE("select owner_user_id, visibility, tags from recipes where id = $1", [id]);
+  assert.equal(r.owner_user_id, idE);
+  assert.equal(r.visibility, "group", "初期値はグループ公開");
+  assert.deepEqual(r.tags, ["丼", "簡単"], "空のタグは除く");
+  assert.deepEqual((await asE("select name, position, optional from recipe_ingredients where recipe_id = $1 order by position", [id])).map((x) => x.name), ["鶏もも肉", "卵", "三つ葉"]);
+  // 編集で置き換え
+  await asE("select save_recipe($1, $2::jsonb)", [id, recipeJson({ title: "親子丼（改）", steps: [{ body: "全部煮る" }] })]);
+  assert.equal((await asE("select count(*)::int n from recipe_steps where recipe_id = $1", [id]))[0].n, 1);
+  // 他の人は編集できない・直接は書けない
+  await rejects(() => as("C", "select save_recipe($1, $2::jsonb)", [id, recipeJson()]), /forbidden/);
+  await rejects(() => as("A", "select save_recipe($1, $2::jsonb)", [id, recipeJson()]), /forbidden/, "管理者も編集はできない");
+  await rejects(() => asE("update recipes set title = 'x' where id = $1", [id]), /permission denied/);
+  await rejects(() => asE("insert into recipe_steps (recipe_id, position, body) values ($1, 9, 'x')", [id]), /permission denied/);
+  await rejects(() => as("D", "select save_recipe(null, $1::jsonb)", [recipeJson()]), /forbidden/);
+  await rejects(() => asE("select save_recipe(null, $1::jsonb)", [recipeJson({ source_url: "javascript:alert(1)" })]), /check constraint/);
+});
+
+await test("レシピ: 公開範囲（グループ／家族だけ／自分だけ）", async () => {
+  const save = async (visibility) => (await as("C", "select save_recipe(null, $1::jsonb) id", [recipeJson({ title: visibility, visibility })]))[0].id;
+  const g = await save("group");
+  const h = await save("household");
+  const p = await save("private");
+  const sees = async (who, id) => (await (who === "E" ? asE : (sql, prm) => as(who, sql, prm))("select id from recipes where id = $1", [id])).length === 1;
+  // C と E は別の家族
+  assert.deepEqual([await sees("C", g), await sees("C", h), await sees("C", p)], [true, true, true], "作成者は全部見える");
+  assert.deepEqual([await sees("E", g), await sees("E", h), await sees("E", p)], [true, false, false], "別の家族はグループ公開だけ");
+  assert.deepEqual([await sees("A", g), await sees("A", h), await sees("A", p)], [true, false, false], "管理者も同じ");
+  assert.equal(await sees("D", g), false, "グループ外は見えない");
+  // E を C の家族に移すと、家族だけのレシピが見える（作成者の今の家族で判定）
+  const [{ household_id: hC }] = await asSuper("select household_id from household_members where user_id = $1", [ids.C]);
+  await asSuper("update household_members set household_id = $1 where user_id = $2", [hC, idE]);
+  assert.equal(await sees("E", h), true);
+  assert.equal(await sees("E", p), false);
+  assert.equal((await asE("select id from recipe_ingredients where recipe_id = $1", [h])).length, 3, "材料も同じ範囲で見える");
+  assert.equal((await asE("select id from recipe_ingredients where recipe_id = $1", [p])).length, 0);
+  // コピー元は見えるレシピだけ
+  const [{ id: copy }] = await asE("select save_recipe(null, $1::jsonb) id", [recipeJson({ copied_from: p })]);
+  assert.equal((await asE("select copied_from from recipes where id = $1", [copy]))[0].copied_from, null);
+  const [{ id: copy2 }] = await asE("select save_recipe(null, $1::jsonb) id", [recipeJson({ copied_from: g })]);
+  assert.equal((await asE("select copied_from from recipes where id = $1", [copy2]))[0].copied_from, g);
+});
+
+await test("レシピ: 削除は作成者と管理者（論理削除で見えなくなる）", async () => {
+  const [{ id }] = await as("C", "select save_recipe(null, $1::jsonb) id", [recipeJson()]);
+  await rejects(() => asE("select delete_recipe($1)", [id]), /forbidden/);
+  await as("A", "select delete_recipe($1)", [id]);
+  assert.equal((await as("C", "select id from recipes where id = $1", [id])).length, 0);
+  await rejects(() => as("C", "select save_recipe($1, $2::jsonb)", [id, recipeJson()]), /forbidden/, "削除後は編集できない");
+  const [{ n }] = await asE("select count(*)::int n from recipe_categories");
+  assert.equal(n, 8, "カテゴリは家族も読める");
+  await rejects(() => asE("insert into recipe_categories (name) values ('x')"), /row-level security/);
+});
+
 console.log(`\n${passed} passed${process.exitCode ? ", some FAILED" : ""}`);

@@ -61,7 +61,6 @@ recipes
   owner_user_id uuid
   title text (1–60)
   visibility text  check in ('group', 'household', 'private')  default 'group'
-  household_id uuid  -- 作成時の家族（visibility = household の判定用）
   servings int null, cook_minutes int null
   category_id uuid null, tags text[] default '{}'
   memo text null (〜1000)
@@ -86,7 +85,7 @@ recipe_ingredients
 recipe_steps
   id, recipe_id, position int, body text (1–500)
 ```
-- RLS（見える範囲）: `group` → `is_cook_user()`、`household` → 作成者と同じ家族、`private` → 作成者のみ。下書きは持たず、登録画面の入力は端末に一時保存
+- RLS（見える範囲）: `group` → `is_cook_user()`、`household` → 作成者と同じ家族（作成者の**今の**家族で判定。家族を組み替えたら見える人も変わる。2026-10-18 実装時に変更）、`private` → 作成者のみ。下書きは持たず、登録画面の入力は端末に一時保存
 - 編集は作成者のみ、削除（論理削除）は作成者と管理者（D16）
 - 保存は1回の RPC `save_recipe(recipe jsonb)` でレシピ・材料・手順をまとめて置き換え（CondoFit の `save_training_session` と同じ方式）
 
@@ -157,7 +156,7 @@ PWA:
 ## 8. 実装の順番（目安）
 1. 利用者の種類・家族・ログインの振り分け（DB＋テスト先行。CondoFit 側の漏れ確認） … ✅ 2026-10-18（`20261018000003_cook_users_households.sql`。家族ユーザー作成・家族の管理画面は 8 で）
 2. 食材マスタ（初期データ） … ✅ 2026-10-18（`20261018000004_cook_ingredients.sql` 309件、`src/lib/cook/ingredients.ts`。分類は 肉・魚介・野菜・果物・卵・乳製品・豆腐・大豆製品・米・パン・麺・調味料・乾物・粉・その他。管理画面は 8 で）
-3. レシピの DB・RLS・保存 RPC
+3. レシピの DB・RLS・保存 RPC … ✅ 2026-10-18（`20261018000005_cook_recipes.sql`、`src/app/actions/cook-recipes.ts`、`src/lib/cook/amount.ts`）
 4. `/cook` のレイアウト・PWA・一覧・詳細
 5. 登録・編集画面（手入力）、写真
 6. URL取り込み、AI の当てはめ
