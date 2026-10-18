@@ -8,11 +8,13 @@ export type Member = {
   displayName: string;
   role: "admin" | "member";
   groupId: string;
+  /** 使えるアプリ。all = CondoFit・CondoCook、cook = CondoCook だけ（CondoFit メンバーでない家族） */
+  apps: "all" | "cook";
   /** ログインごとに変わるID（再ログインまで有効な「この案内を消した」等の記憶に使う） */
   sessionId: string;
 };
 
-/** ログイン中かつ利用停止されていないメンバー。該当しなければ null */
+/** ログイン中かつ利用停止されていないメンバー（CondoCook だけの人も含む）。該当しなければ null */
 export const getCurrentMember = cache(async (): Promise<Member | null> => {
   const supabase = await createClient();
   const { data: claims } = await supabase.auth.getClaims();
@@ -23,7 +25,7 @@ export const getCurrentMember = cache(async (): Promise<Member | null> => {
   // RLS により、利用停止・グループ外のユーザーはここで何も取得できない
   const { data } = await supabase
     .from("group_members")
-    .select("group_id, role, users!inner(id, display_name)")
+    .select("group_id, role, apps, users!inner(id, display_name)")
     .eq("user_id", userId)
     .is("removed_at", null)
     .maybeSingle();
@@ -35,18 +37,29 @@ export const getCurrentMember = cache(async (): Promise<Member | null> => {
     displayName: user.display_name,
     role: data.role as Member["role"],
     groupId: data.group_id as string,
+    apps: data.apps === "cook" ? "cook" : "all",
     sessionId,
   };
 });
 
+/** CondoFit のメンバー。CondoCook だけの人は CondoCook へ */
 export async function requireMember(): Promise<Member> {
   const member = await getCurrentMember();
   if (!member) redirect("/login");
+  if (member.apps !== "all") redirect("/cook");
   return member;
 }
 
+/** CondoFit の管理者 */
 export async function requireAdmin(): Promise<Member> {
   const member = await requireMember();
   if (member.role !== "admin") redirect("/");
+  return member;
+}
+
+/** CondoCook を使える人（CondoFit メンバーと、CondoCook だけの家族） */
+export async function requireCookUser(): Promise<Member> {
+  const member = await getCurrentMember();
+  if (!member) redirect("/login?next=/cook");
   return member;
 }

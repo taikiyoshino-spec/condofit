@@ -12,7 +12,7 @@ import {
   type DeviceAccount,
 } from "@/lib/client/device-accounts";
 
-export function LoginForm() {
+export function LoginForm({ next }: { next: string | null }) {
   const [state, action] = useActionState(loginAction, undefined);
   // この端末でログインしたことのある人（端末内の記録のみ。サーバーからメンバー一覧は取得しない）
   const accounts = useSyncExternalStore(subscribeAccounts, getAccountsSnapshot, getAccountsServerSnapshot);
@@ -70,6 +70,7 @@ export function LoginForm() {
 
   return (
     <form action={action} className="space-y-4">
+      {next && <input type="hidden" name="next" value={next} />}
       {selected ? (
         <div className="flex items-center gap-3 rounded-xl border border-border bg-surface p-3">
           <Avatar userId={selected.userId} name={selected.displayName} src={selected.thumb} size={44} />

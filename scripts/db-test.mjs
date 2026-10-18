@@ -632,4 +632,55 @@ await test("定期処理: 毎分ジョブ登録、Vault未設定なら何もし�
   await rejects(() => as("A", "select invoke_cron_tick()"), /permission denied/);
 });
 
+// ---- CondoCook だけ使える家族（E） ----
+const idE = "00000000-0000-0000-0000-00000000000e";
+await asSuper("insert into auth.users (id) values ($1)", [idE]);
+await asSuper("insert into users (id, display_name) values ($1, 'Eさん')", [idE]);
+await asSuper("insert into group_members (group_id, user_id, role, apps) values ($1, $2, 'member', 'cook')", [groupId, idE]);
+const asE = (sql, params) => db.exec(`reset role; select set_config('request.jwt.claim.sub', '${idE}', false); set role authenticated;`).then(() => db.query(sql, params)).then((r) => r.rows);
+
+await test("CondoCook だけの家族: 名前・アイコンは読めるが、CondoFit のデータは読めず書けない", async () => {
+  assert.equal((await asE("select is_member() m, is_cook_user() c, is_admin() a"))[0].m, false);
+  assert.equal((await asE("select is_cook_user() c"))[0].c, true);
+  assert.ok((await asE("select * from users")).length >= 5, "メンバーの名前は見える");
+  assert.equal((await asE("select * from groups")).length, 1);
+  assert.equal((await asE("select apps from group_members where user_id = $1", [idE]))[0].apps, "cook");
+  for (const t of ["training_sessions", "session_exercises", "exercise_entries", "exercises", "body_parts", "schedules",
+    "schedule_participants", "check_ins", "day_comments", "workout_menus", "workout_menu_items", "invite_tokens"]) {
+    const [{ n }] = await asSuper(`select count(*)::int n from ${t}`);
+    const rows = await asE(`select * from ${t}`).catch(() => []);
+    assert.equal(rows.length, 0, `${t} は見えない（全体 ${n} 件）`);
+  }
+  await rejects(() => asE("insert into schedules (date, time_slot) values (jst_today(), 'night')"), /row-level security|permission denied/);
+  await rejects(() => asE("insert into day_comments (date, body) values (jst_today(), 'x')"), /row-level security|permission denied/);
+  await rejects(() => asE("select save_training_session(null, now(), '[]')"), /forbidden|permission denied|row-level security/);
+  // ランキングには出ない
+  const ranking = await as("A", "select display_name from monthly_ranking(jst_today())");
+  assert.ok(!ranking.some((r) => r.display_name === "Eさん"), "ランキングに出ない");
+});
+
+await test("CondoCook だけの家族: CondoFit の通知は作られない", async () => {
+  await clearNotifs();
+  await as("A", "insert into day_comments (date, body) values (jst_today(), '家族には届かない')");
+  assert.equal((await asSuper("select count(*)::int n from notifications where recipient_user_id = $1", [idE]))[0].n, 0);
+  assert.ok((await asSuper("select count(*)::int n from notifications where recipient_user_id = $1", [ids.B]))[0].n > 0, "メンバーには届く");
+});
+
+await test("家族: 入っていなければ1人の家族を作る・1人1家族・見えるのは自分の家族（管理者は全部）", async () => {
+  const [{ h: hE }] = await asE("select ensure_my_household() h");
+  assert.ok(hE);
+  assert.equal((await asE("select ensure_my_household() h"))[0].h, hE, "2回目は同じ家族");
+  assert.equal((await asE("select name from households"))[0].name, "Eさん");
+  const [{ h: hC }] = await as("C", "select ensure_my_household() h");
+  assert.notEqual(hC, hE);
+  assert.equal((await as("C", "select * from households")).length, 1, "自分の家族だけ");
+  assert.equal((await as("C", "select * from household_members where user_id = $1", [idE])).length, 0);
+  assert.ok((await as("A", "select * from households")).length >= 2, "管理者は全部見える");
+  await rejects(() => as("D", "select ensure_my_household()"), /forbidden/);
+  // 直接の作成・変更はできない（管理者もサーバー経由）
+  await rejects(() => asE("insert into households (group_id, name) values ($1, 'x')", [groupId]), /permission denied/);
+  await rejects(() => as("A", "insert into household_members (user_id, household_id) values ($1, $2)", [ids.B, hC]), /permission denied/);
+  await rejects(() => asSuper("insert into household_members (user_id, household_id) values ($1, $2)", [ids.C, hE]), /duplicate key/);
+});
+
 console.log(`\n${passed} passed${process.exitCode ? ", some FAILED" : ""}`);

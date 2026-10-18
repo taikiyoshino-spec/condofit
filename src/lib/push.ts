@@ -32,7 +32,18 @@ export async function sendPush(userIds: string[], category: Category, message: P
     .select("user_id, check_in, location_stale, comment, schedule, users!inner(deactivated_at)")
     .in("user_id", userIds)
     .is("users.deactivated_at", null);
-  const enabled = (settings ?? []).filter((s) => s[category]).map((s) => s.user_id as string);
+  let enabled = (settings ?? []).filter((s) => s[category]).map((s) => s.user_id as string);
+  if (enabled.length === 0) return;
+
+  // ここの通知はすべて CondoFit のもの。CondoCook だけの人（家族）には送らない
+  const { data: fitMembers } = await admin
+    .from("group_members")
+    .select("user_id")
+    .in("user_id", enabled)
+    .eq("apps", "all")
+    .is("removed_at", null);
+  const fit = new Set((fitMembers ?? []).map((m) => m.user_id as string));
+  enabled = enabled.filter((id) => fit.has(id));
   if (enabled.length === 0) return;
 
   const { data: subs } = await admin

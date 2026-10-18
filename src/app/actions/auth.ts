@@ -3,9 +3,10 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { requireAdmin, requireMember } from "@/lib/auth/session";
+import { requireAdmin, requireCookUser } from "@/lib/auth/session";
 import * as auth from "@/lib/auth/service";
 import { resolveAppOrigin } from "@/lib/origin";
+import { safeNextPath } from "@/lib/auth/next-path";
 
 export type FormState = { error?: string; message?: string; inviteUrl?: string } | undefined;
 
@@ -14,7 +15,8 @@ const str = (formData: FormData, key: string) => String(formData.get(key) ?? "")
 export async function loginAction(_: FormState, formData: FormData): Promise<FormState> {
   const result = await auth.login(str(formData, "display_name"), str(formData, "pin"));
   if (!result.ok) return { error: result.error };
-  redirect("/");
+  // CondoCook だけの人が CondoFit の画面に戻ろうとした場合は、CondoFit 側のレイアウトが /cook へ送る
+  redirect(safeNextPath(str(formData, "next")) ?? "/");
 }
 
 export async function joinAction(_: FormState, formData: FormData): Promise<FormState> {
@@ -34,7 +36,7 @@ export async function logoutAction() {
 }
 
 export async function changeDisplayNameAction(_: FormState, formData: FormData): Promise<FormState> {
-  const member = await requireMember();
+  const member = await requireCookUser();
   const result = await auth.changeDisplayName(member, str(formData, "display_name"));
   if (!result.ok) return { error: result.error };
   revalidatePath("/", "layout");
@@ -42,7 +44,7 @@ export async function changeDisplayNameAction(_: FormState, formData: FormData):
 }
 
 export async function changePinAction(_: FormState, formData: FormData): Promise<FormState> {
-  const member = await requireMember();
+  const member = await requireCookUser();
   const result = await auth.changePin(
     member,
     str(formData, "current_pin"),
@@ -54,7 +56,7 @@ export async function changePinAction(_: FormState, formData: FormData): Promise
 }
 
 export async function withdrawAction(_: FormState, formData: FormData): Promise<FormState> {
-  const member = await requireMember();
+  const member = await requireCookUser();
   if (str(formData, "confirm") !== "yes") return { error: "確認にチェックしてください" };
   const result = await auth.deactivateMember(member, member.id);
   if (!result.ok) return { error: result.error };

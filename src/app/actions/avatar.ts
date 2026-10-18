@@ -2,7 +2,7 @@
 
 import { randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
-import { requireMember } from "@/lib/auth/session";
+import { requireCookUser } from "@/lib/auth/session";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { AVATAR_MAX_BYTES, detectImageType } from "@/lib/avatar";
 
@@ -12,7 +12,7 @@ const EXT = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" } as
 
 /** 自分のプロフィール画像を登録・変更する（端末側で256pxに縮小済みの画像を受け取る） */
 export async function uploadAvatarAction(formData: FormData): Promise<AvatarResult> {
-  const member = await requireMember();
+  const member = await requireCookUser();
   const file = formData.get("file");
   if (!(file instanceof File)) return { ok: false, error: "画像を選んでください" };
   if (file.size > AVATAR_MAX_BYTES) return { ok: false, error: "画像が大きすぎます" };
@@ -40,7 +40,7 @@ export async function uploadAvatarAction(formData: FormData): Promise<AvatarResu
 }
 
 export async function removeAvatarAction(): Promise<AvatarResult> {
-  const member = await requireMember();
+  const member = await requireCookUser();
   const admin = createAdminClient();
   const { data: current } = await admin.from("users").select("avatar_path").eq("id", member.id).single();
   const { error } = await admin.from("users").update({ avatar_path: null }).eq("id", member.id);

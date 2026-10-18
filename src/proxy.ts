@@ -35,6 +35,8 @@ export async function proxy(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     url.search = "";
+    // ログイン後に元の画面へ戻す（CondoCook から来た人を CondoCook に戻すため）。検証はログイン側で行う
+    if (pathname !== "/") url.searchParams.set("next", `${pathname}${request.nextUrl.search}`);
     return NextResponse.redirect(url);
   }
   // ログイン済みで /login に来た場合の転送はページ側で行う

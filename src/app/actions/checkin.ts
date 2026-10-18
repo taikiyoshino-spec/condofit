@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireMember } from "@/lib/auth/session";
+import { requireCookUser, requireMember } from "@/lib/auth/session";
 import * as checkin from "@/lib/checkin/service";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -33,7 +33,7 @@ export async function checkOutAction() {
 type Subscription = { endpoint: string; keys: { p256dh: string; auth: string } };
 
 export async function savePushSubscriptionAction(sub: Subscription) {
-  const member = await requireMember();
+  const member = await requireCookUser();
   if (!sub?.endpoint?.startsWith("https://") || !sub.keys?.p256dh || !sub.keys?.auth) return { ok: false };
   // 同じ端末で別ユーザーに切り替えた場合も購読を付け替えられるよう service_role で upsert
   const admin = createAdminClient();
@@ -45,7 +45,7 @@ export async function savePushSubscriptionAction(sub: Subscription) {
 }
 
 export async function removePushSubscriptionAction(endpoint: string) {
-  await requireMember();
+  await requireCookUser();
   const supabase = await createClient();
   const { error } = await supabase
     .from("push_subscriptions")
@@ -58,7 +58,7 @@ const SETTING_KEYS = ["check_in", "location_stale", "schedule", "comment"] as co
 export type NotificationSettingKey = (typeof SETTING_KEYS)[number];
 
 export async function updateNotificationSettingAction(key: NotificationSettingKey, value: boolean) {
-  const member = await requireMember();
+  const member = await requireCookUser();
   if (!SETTING_KEYS.includes(key)) return { ok: false };
   const supabase = await createClient();
   const { error } = await supabase
