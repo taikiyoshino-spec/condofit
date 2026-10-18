@@ -4,10 +4,12 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { saveRecipeAction, type RecipeInput, type Visibility } from "@/app/actions/cook-recipes";
 import { removeRecipePhotoAction, uploadRecipePhotoAction } from "@/app/actions/cook-photos";
+import { addIngredientAction, type ImportDraft, type IngredientCategory } from "@/app/actions/cook-import";
+import { BottomSheet } from "@/components/bottom-sheet";
 import { showToast } from "@/components/toaster";
 import { resizeToJpeg } from "@/lib/client/resize-image";
 import { ingredientsToRows, parseTags, rowsToIngredients, type EditorItem, type EditorRow } from "@/lib/cook/editor";
-import { matchIngredient, searchIngredients } from "@/lib/cook/ingredients";
+import { cleanIngredientName, matchIngredient, searchIngredients } from "@/lib/cook/ingredients";
 import { PHOTO_FULL_SIDE, PHOTO_THUMB_SIDE, recipePhotoUrl } from "@/lib/cook/photo";
 import type { Category, IngredientOption, RecipeDetail } from "@/lib/cook/queries";
 
@@ -53,6 +55,22 @@ function fromRecipe(r: RecipeDetail | null): Form {
   };
 }
 
+/** URLから取り込んだ下書き → 入力欄 */
+function fromImport(d: ImportDraft): Form {
+  return {
+    ...fromRecipe(null),
+    title: d.title,
+    servings: d.servings ? String(d.servings) : "",
+    cookMinutes: d.cookMinutes ? String(d.cookMinutes) : "",
+    sourceUrl: d.sourceUrl,
+    sourceName: d.sourceName ?? "",
+    rows: ingredientsToRows(d.ingredients.map((i) => ({ ...i, optional: false })), newKey),
+    steps: (d.steps.length ? d.steps : [""]).map((body) => ({ key: newKey(), body })),
+  };
+}
+
+const INGREDIENT_CATEGORIES: IngredientCategory[] = ["肉", "魚介", "野菜", "果物", "卵・乳製品", "豆腐・大豆製品", "米・パン・麺", "調味料", "乾物・粉", "その他"];
+
 function loadDraft(): Form | null {
   try {
     const raw = localStorage.getItem(DRAFT_KEY);
@@ -67,27 +85,34 @@ function loadDraft(): Form | null {
 
 /**
  * レシピの登録・編集（手入力）。
- * - mode=edit: 自分のレシピを編集 / mode=new: 新規（copyFrom があればコピーしてアレンジ）
+ * - mode=edit: 自分のレシピを編集 / mode=new: 新規（copyFrom があればコピーしてアレンジ、imported があればURLから取り込んだ下書き）
  * - 新規の入力は端末に下書きとして残す（アプリを閉じても消えない）
  */
 export function RecipeEditor({
   mode,
   recipe,
   copyFrom,
+  imported,
   categories,
-  ingredients,
+  ingredients: initialIngredients,
 }: {
   mode: "new" | "edit";
   recipe: RecipeDetail | null;
   copyFrom?: RecipeDetail | null;
+  imported?: ImportDraft | null;
   categories: Category[];
   ingredients: IngredientOption[];
 }) {
   const router = useRouter();
   const [form, setForm] = useState<Form>(() => {
     if (copyFrom) return { ...fromRecipe(copyFrom), title: `${copyFrom.title}（アレンジ）`.slice(0, 60), visibility: "group" };
+    if (imported) return fromImport(imported);
     return fromRecipe(recipe);
   });
+  // 食材マスタ（この画面で追加した食材も含める）
+  const [ingredients, setIngredients] = useState(initialIngredients);
+  const [adding, setAdding] = useState<{ rowKey: number; name: string; reading: string; category: IngredientCategory } | null>(null);
+  const [addingPending, startAdding] = useTransition();
   const [draftRestored, setDraftRestored] = useState(false);
   const [photo, setPhoto] = useState<{ full: Blob; thumb: Blob; preview: string } | null>(null);
   const [removePhoto, setRemovePhoto] = useState(false);
@@ -97,9 +122,9 @@ export function RecipeEditor({
   const fileRef = useRef<HTMLInputElement>(null);
   const useDraft = mode === "new" && !copyFrom;
 
-  // 新規: 前回の下書きがあれば続きから
+  // 新規: 前回の下書きがあれば続きから（URLから取り込んだときは取り込んだ内容を使う）
   useEffect(() => {
-    if (!useDraft) return;
+    if (!useDraft || imported) return;
     const t = setTimeout(() => {
       const draft = loadDraft();
       if (draft && (draft.title || draft.rows.some((r) => r.name) || draft.steps.some((s) => s.body))) {
@@ -108,7 +133,7 @@ export function RecipeEditor({
       }
     }, 0);
     return () => clearTimeout(t);
-  }, [useDraft]);
+  }, [useDraft, imported]);
 
   // 新規: 入力のたびに下書きを保存（写真は保存しない）
   useEffect(() => {
@@ -353,7 +378,7 @@ export function RecipeEditor({
                     className="min-w-0 flex-[2] rounded-lg border border-border bg-surface px-2 py-1.5 text-base"
                   />
                 </div>
-                {focusedRow === r.key && suggestions.length > 0 && (
+                {focusedRow === r.key && r.name.trim() && !r.ingredientId && (
                   <ul className="mt-1 flex flex-wrap gap-1" aria-label="食材の候補">
                     {suggestions.map((s) => (
                       <li key={s.id}>
@@ -370,6 +395,21 @@ export function RecipeEditor({
                         </button>
                       </li>
                     ))}
+                    {!matchIngredient(r.name, ingredients) && (
+                      <li>
+                        <button
+                          type="button"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => {
+                            setAdding({ rowKey: r.key, name: cleanIngredientName(r.name) || r.name.trim(), reading: "", category: "その他" });
+                            setFocusedRow(null);
+                          }}
+                          className="rounded-full border border-dashed border-border px-2.5 py-1 text-xs text-muted"
+                        >
+                          ＋ 食材の一覧に追加
+                        </button>
+                      </li>
+                    )}
                   </ul>
                 )}
                 <div className="mt-1 flex items-center justify-between">
@@ -438,6 +478,49 @@ export function RecipeEditor({
           </label>
         )}
       </section>
+
+      <BottomSheet open={adding !== null} onClose={() => setAdding(null)} title="食材の一覧に追加">
+        {adding && (
+          <div className="space-y-3">
+            <p className="text-xs text-muted">仲間みんなで使う食材の一覧に追加します。あとで食材の管理や買い物リストで使います。</p>
+            <label className="block space-y-1">
+              <span className="text-sm font-medium">食材名</span>
+              <input value={adding.name} onChange={(e) => setAdding({ ...adding, name: e.target.value })} maxLength={30} className={input} />
+            </label>
+            <label className="block space-y-1">
+              <span className="text-sm font-medium">よみ（ひらがな・任意）</span>
+              <input value={adding.reading} onChange={(e) => setAdding({ ...adding, reading: e.target.value })} maxLength={60} className={input} placeholder="例：けーる" />
+            </label>
+            <label className="block space-y-1">
+              <span className="text-sm font-medium">分類</span>
+              <select value={adding.category} onChange={(e) => setAdding({ ...adding, category: e.target.value as IngredientCategory })} className={`${input} px-2`}>
+                {INGREDIENT_CATEGORIES.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              type="button"
+              disabled={addingPending || !adding.name.trim()}
+              onClick={() =>
+                startAdding(async () => {
+                  const r = await addIngredientAction(adding.name, adding.reading, adding.category);
+                  if (!r.ok) return showToast(r.error);
+                  setIngredients((list) => (list.some((x) => x.id === r.ingredient.id) ? list : [...list, r.ingredient]));
+                  setRow(adding.rowKey, { name: r.ingredient.name, ingredientId: r.ingredient.id });
+                  setAdding(null);
+                  showToast("食材を追加しました");
+                })
+              }
+              className="w-full rounded-lg bg-accent py-3 text-sm font-semibold text-accent-fg disabled:opacity-50"
+            >
+              {addingPending ? "追加中…" : "追加する"}
+            </button>
+          </div>
+        )}
+      </BottomSheet>
 
       <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-10 mx-auto max-w-lg px-4 pb-2">
         {error && <p className="mb-2 rounded-lg bg-surface px-3 py-2 text-sm text-danger shadow">{error}</p>}

@@ -159,6 +159,6 @@ PWA:
 3. レシピの DB・RLS・保存 RPC … ✅ 2026-10-18（`20261018000005_cook_recipes.sql`、`src/app/actions/cook-recipes.ts`、`src/lib/cook/amount.ts`）
 4. `/cook` のレイアウト・PWA・一覧・詳細 … ✅ 2026-10-18（マニフェストは `/cook/manifest.webmanifest` のルートハンドラ、差し色は `.theme-cook`、アイコンは `scripts/generate-icons.mjs` の cook-*.png）
 5. 登録・編集画面（手入力）、写真 … ✅ 2026-10-18（`src/app/cook/recipe-editor.tsx`、写真は `20261018000006_cook_recipe_photos.sql`・`src/app/actions/cook-photos.ts`・`/api/cook/photo`。食材マスタへの追加は 6 で）
-6. URL取り込み、AI の当てはめ
+6. URL取り込み、AI の当てはめ … ✅ 2026-10-18（`src/lib/cook/import.ts`・`fetch-page.ts`（接続時に名前解決の結果を確認しローカル・社内アドレスを拒否）・`ai.ts`・`src/lib/ai/gemini.ts`、`src/app/actions/cook-import.ts`。環境変数 `GEMINI_API_KEY`／`GEMINI_MODEL`（初期値 gemini-2.5-flash）。食材マスタへの追加は登録画面の材料の候補から）
 7. 作るモード
 8. 管理画面（家族・家族ユーザー・食材マスタ・カテゴリ）
