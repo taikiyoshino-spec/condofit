@@ -35,25 +35,26 @@ function setText(s: Partial<Entry>): string {
   return parts.join("×") || "—";
 }
 
-/** AIへの相談文。使える種目の一覧と、出力してほしいJSONの形を入れる */
+/**
+ * AIへの依頼文。ふだん使っているAIでメニューを相談したあとに貼る前提で、
+ * 相談した内容を、使える種目の名前とJSONの形で出力してもらう
+ */
 export function buildMenuPrompt({
   exercises,
-  request,
   current,
   recent,
 }: {
   exercises: PromptExercise[];
-  request?: string;
   current?: { name: string; items: { name: string; sets: Partial<Entry>[] }[] } | null;
   recent?: { name: string; sets: Partial<Entry>[] }[];
 }): string {
   const lines: string[] = [];
   lines.push(
     current
-      ? "あなたは筋トレのパーソナルトレーナーです。今のトレーニングメニューを見直して、改善したメニューを1つ作ってください。"
-      : "あなたは筋トレのパーソナルトレーナーです。次の条件で、トレーニングメニューを1つ作ってください。",
+      ? "これまでの相談内容をふまえて、下の「今のメニュー」を見直したメニューを、最後の【出力形式】で出力してください。"
+      : "これまでの相談内容をもとに、トレーニングメニューを1つ、最後の【出力形式】で出力してください。",
+    "（記録アプリに取り込むための出力です）",
   );
-  lines.push("", "【相談したいこと】", request?.trim() || "（ここに目的・1回の時間・頻度・体の状態などを書いてください）");
   if (current) {
     lines.push("", "【今のメニュー】", "```json", menuToJson(current), "```");
   }

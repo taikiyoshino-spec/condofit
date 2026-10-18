@@ -41,7 +41,6 @@ export function MenuImport({
   recent: { name: string; sets: Partial<Entry>[] }[];
 }) {
   const router = useRouter();
-  const [request, setRequest] = useState("");
   const [answer, setAnswer] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [parsed, setParsed] = useState<TextMenu | null>(null);
@@ -55,19 +54,18 @@ export function MenuImport({
     () =>
       buildMenuPrompt({
         exercises: catalog.exercises.map((e) => ({ name: e.name, type: e.type, excludesBar: e.excludesBar })),
-        request,
         current: menu,
         recent,
       }),
-    [catalog.exercises, request, menu, recent],
+    [catalog.exercises, menu, recent],
   );
   const byId = useMemo(() => new Map(catalog.exercises.map((e) => [e.id, e])), [catalog.exercises]);
 
   const copyPrompt = async () => {
-    if (await copyText(prompt)) showToast("相談文をコピーしました。AIに貼り付けてください");
+    if (await copyText(prompt)) showToast("依頼文をコピーしました。AIに貼り付けてください");
     else {
       setShowPrompt(true);
-      showToast("コピーできませんでした。下の相談文を長押しでコピーしてください");
+      showToast("コピーできませんでした。下の依頼文を長押しでコピーしてください");
     }
   };
 
@@ -113,36 +111,23 @@ export function MenuImport({
   return (
     <div className="space-y-4 pb-8">
       <section className="mx-4 rounded-xl border border-border bg-surface p-4">
-        <h2 className="font-semibold">1. AIへの相談文をコピー</h2>
+        <h2 className="font-semibold">1. AIへの依頼文をコピー</h2>
         <p className="mt-1 text-sm text-muted">
-          {menu
-            ? "今のメニューと前回の記録、使える種目の一覧、答えの形の指定が入っています。"
-            : "使える種目の一覧と、答えの形の指定が入っています。"}
-          ふだん使っているAI（ChatGPT・Gemini など）に貼り付けてください。
+          ふだん使っているAI（ChatGPT・Gemini など）でメニューを相談したあと、その会話に貼り付けてください。相談した内容を、このアプリで読み込める形で出してもらえます。
+          {menu ? "今のメニューと前回の記録も入っています。" : ""}
         </p>
-        <label className="mt-3 block space-y-1">
-          <span className="text-sm font-medium">相談したいこと（任意）</span>
-          <textarea
-            value={request}
-            onChange={(e) => setRequest(e.target.value)}
-            rows={3}
-            maxLength={500}
-            placeholder="例：週2回・1時間で、胸と背中を中心に。腰に不安あり"
-            className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-base"
-          />
-        </label>
-        <button type="button" onClick={() => void copyPrompt()} className="mt-2 w-full rounded-lg bg-accent py-2.5 text-sm font-semibold text-accent-fg">
-          相談文をコピー
+        <button type="button" onClick={() => void copyPrompt()} className="mt-3 w-full rounded-lg bg-accent py-2.5 text-sm font-semibold text-accent-fg">
+          依頼文をコピー
         </button>
         <button type="button" onClick={() => setShowPrompt((v) => !v)} className="mt-2 text-xs text-muted">
-          {showPrompt ? "相談文を閉じる" : "相談文の中身を見る"}
+          {showPrompt ? "依頼文を閉じる" : "依頼文の中身を見る"}
         </button>
         {showPrompt && (
           <textarea
             readOnly
             value={prompt}
             rows={10}
-            aria-label="相談文"
+            aria-label="依頼文"
             onFocus={(e) => e.target.select()}
             className="mt-2 w-full rounded-lg border border-border bg-bg px-3 py-2 text-xs"
           />

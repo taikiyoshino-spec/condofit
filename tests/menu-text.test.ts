@@ -61,11 +61,10 @@ test("guessType / buildMenuPrompt", () => {
   assert.equal(guessType([]), "weight");
   const p = buildMenuPrompt({
     exercises: [{ name: "ベンチプレス", type: "weight", excludesBar: true }, { name: "ランニングマシン", type: "cardio" }],
-    request: "胸を鍛えたい",
     current: { name: "胸", items: [{ name: "ベンチプレス", sets: [{ weight_kg: 40, reps: 10 }] }] },
     recent: [{ name: "ベンチプレス", sets: [{ weight_kg: 40, reps: 10 }] }],
   });
-  assert.ok(p.includes("胸を鍛えたい"));
+  assert.ok(p.includes("これまでの相談内容"));
   assert.ok(p.includes("- ベンチプレス（重量系・重さはバーを除いた値）"));
   assert.ok(p.includes("【今のメニュー】"));
   assert.ok(p.includes("- ベンチプレス: 40kg×10回"));
