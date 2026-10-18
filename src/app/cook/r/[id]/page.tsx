@@ -21,7 +21,7 @@ export default async function RecipePage({ params }: PageProps<"/cook/r/[id]">) 
   const isOwner = recipe.ownerId === member.id;
 
   return (
-    <article className="pb-8">
+    <article className="pb-24">
       <PageHeader title="レシピ" back="/cook" />
       {recipe.photoPath && (
         // eslint-disable-next-line @next/next/no-img-element -- 認証付きの配信なので next/image の最適化は使わない
@@ -71,7 +71,7 @@ export default async function RecipePage({ params }: PageProps<"/cook/r/[id]">) 
         </div>
       </header>
 
-      <IngredientList ingredients={recipe.ingredients} servings={recipe.servings} initialServings={recipe.servings ? householdSize : null} />
+      <IngredientList recipeId={recipe.id} ingredients={recipe.ingredients} servings={recipe.servings} initialServings={recipe.servings ? householdSize : null} />
 
       <section className="mx-4 mb-4">
         <h2 className="mb-2 text-lg font-semibold">作り方</h2>

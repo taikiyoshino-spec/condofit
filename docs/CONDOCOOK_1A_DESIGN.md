@@ -135,7 +135,7 @@ PWA:
 ## 5. 作るモードの細部（D24）
 - 画面を消さない: Screen Wake Lock API。画面に戻ったら取り直す。非対応なら何もしない
 - タイマー: 手順の本文から「N分」「N秒」「N〜M分」を見つけてボタンにする（範囲は長い方）。複数同時、終了時は音と振動（端末が対応していれば）。作るモードを出るまで保持
-- 音声: Web Speech API の音声認識。**`next.config` の Permissions-Policy が `microphone=()` なので、`/cook` 配下だけ `microphone=(self)` に変える必要がある**（7 で対応）。「次」「つぎ」「戻る」「もどる」などを認識。対応していない端末ではボタンを出さない。オンにしている間だけマイクを使う
+- 音声: Web Speech API の音声認識。Permissions-Policy は `microphone=(self)`（ログイン後に読み込み直さず `/cook` へ移る場合もあるため、`/cook` だけでなく全体で指定。7 で対応済み）。「次」「つぎ」「戻る」「もどる」などを認識。対応していない端末ではボタンを出さない。オンにしている間だけマイクを使う
 - 文字の大きさ: 手順は大きめ（1.5倍程度）。片手で持っても押しやすいよう、左右のタップ領域は画面全体
 
 ---
@@ -160,5 +160,5 @@ PWA:
 4. `/cook` のレイアウト・PWA・一覧・詳細 … ✅ 2026-10-18（マニフェストは `/cook/manifest.webmanifest` のルートハンドラ、差し色は `.theme-cook`、アイコンは `scripts/generate-icons.mjs` の cook-*.png）
 5. 登録・編集画面（手入力）、写真 … ✅ 2026-10-18（`src/app/cook/recipe-editor.tsx`、写真は `20261018000006_cook_recipe_photos.sql`・`src/app/actions/cook-photos.ts`・`/api/cook/photo`。食材マスタへの追加は 6 で）
 6. URL取り込み、AI の当てはめ … ✅ 2026-10-18（`src/lib/cook/import.ts`・`fetch-page.ts`（接続時に名前解決の結果を確認しローカル・社内アドレスを拒否）・`ai.ts`・`src/lib/ai/gemini.ts`、`src/app/actions/cook-import.ts`。環境変数 `GEMINI_API_KEY`／`GEMINI_MODEL`（初期値 gemini-2.5-flash）。食材マスタへの追加は登録画面の材料の候補から）
-7. 作るモード
+7. 作るモード … ✅ 2026-10-18（`src/app/cook/r/[id]/cook/`、`src/lib/cook/cook-mode.ts`。Permissions-Policy は全体で `microphone=(self)` に変更）
 8. 管理画面（家族・家族ユーザー・食材マスタ・カテゴリ）

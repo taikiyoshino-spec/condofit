@@ -1,18 +1,21 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { scaleAmount } from "@/lib/cook/amount";
 import type { RecipeIngredient } from "@/lib/cook/queries";
 
 /**
  * 材料一覧。「− N人分 ＋」で分量を換算して表示する（保存はしない。D18）。
- * レシピに何人分がないときは換算しない
+ * レシピに何人分がないときは換算しない。選んだ人数は「作る」に引き継ぐ
  */
 export function IngredientList({
+  recipeId,
   ingredients,
   servings,
   initialServings,
 }: {
+  recipeId: string;
   ingredients: RecipeIngredient[];
   servings: number | null;
   initialServings: number | null;
@@ -73,6 +76,14 @@ export function IngredientList({
           </ul>
         </div>
       ))}
+      <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-10 mx-auto max-w-lg px-4 pb-2">
+        <Link
+          href={`/cook/r/${recipeId}/cook${servings ? `?n=${people}` : ""}`}
+          className="block w-full rounded-xl bg-accent py-3 text-center font-semibold text-accent-fg shadow-lg"
+        >
+          作る{servings ? `（${people}人分）` : ""}
+        </Link>
+      </div>
     </section>
   );
 }
