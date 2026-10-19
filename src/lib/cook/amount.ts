@@ -48,16 +48,29 @@ export function parseAmount(raw: string): ParsedAmount {
   return null;
 }
 
-/** 数値の表示（大さじ・小さじ・カップは 1/2・1/3・1/4 刻みの分数、それ以外は小数1桁まで） */
+const FRACTIONS: [number, string][] = [[0, ""], [0.25, "1/4"], [1 / 3, "1/3"], [0.5, "1/2"], [2 / 3, "2/3"], [0.75, "3/4"], [1, ""]];
+/** 重さ・かさの単位（小数で表す）。それ以外（個・本・枚など数えるもの）は分数で表す */
+const MEASURE_UNITS = ["g", "kg", "mg", "ml", "mL", "cc", "l", "L", "リットル", "グラム"];
+
+/** 端数をいちばん近い分数に丸める。tolerance より離れていれば null */
+function toFraction(q: number, tolerance: number): string | null {
+  const whole = Math.floor(q + 1e-9);
+  const [best, label] = FRACTIONS.reduce((a, b) => (Math.abs(b[0] - (q - whole)) < Math.abs(a[0] - (q - whole)) ? b : a));
+  if (Math.abs(best - (q - whole)) > tolerance) return null;
+  const w = best === 1 ? whole + 1 : whole;
+  if (!label) return String(w);
+  return w > 0 ? `${w}と${label}` : label;
+}
+
+/**
+ * 数値の表示。大さじ・小さじ・カップは 1/4・1/3 刻みの分数に丸める。
+ * 個・本など数えるものは、分数に近ければ分数（0.8本 → 3/4本）、遠ければ小数1桁。g・ml などは小数1桁（10以上は整数）
+ */
 function formatQuantity(q: number, unit: string): string {
-  if (["大さじ", "小さじ", "カップ"].includes(unit)) {
-    const whole = Math.floor(q + 1e-9);
-    const frac = q - whole;
-    const options: [number, string][] = [[0, ""], [0.25, "1/4"], [1 / 3, "1/3"], [0.5, "1/2"], [2 / 3, "2/3"], [0.75, "3/4"], [1, ""]];
-    const [best, label] = options.reduce((a, b) => (Math.abs(b[0] - frac) < Math.abs(a[0] - frac) ? b : a));
-    const w = best === 1 ? whole + 1 : whole;
-    if (!label) return String(w);
-    return w > 0 ? `${w}と${label}` : label;
+  if (["大さじ", "小さじ", "カップ"].includes(unit)) return toFraction(q, 1) ?? String(q);
+  if (!MEASURE_UNITS.includes(unit) && q < 10) {
+    const f = toFraction(q, 0.06);
+    if (f && f !== "0") return f;
   }
   const rounded = q >= 10 ? Math.round(q) : Math.round(q * 10) / 10;
   return String(rounded);
