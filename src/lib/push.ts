@@ -41,6 +41,13 @@ export async function sendPush(userIds: string[], category: Category, message: P
   const { data: active } = await members;
   const allowed = new Set((active ?? []).map((m) => m.user_id as string));
   enabled = enabled.filter((id) => allowed.has(id));
+  // CondoCook の通知は、CondoCook を一度でも開いた人（家族ができている人）にだけ送る。
+  // CondoFit だけ使っている人に届くと、押したときに CondoFit のアプリの中でレシピの画面が開いてしまうため
+  if (category.startsWith("cook_") && enabled.length > 0) {
+    const { data: cookUsers } = await admin.from("household_members").select("user_id").in("user_id", enabled);
+    const opened = new Set((cookUsers ?? []).map((m) => m.user_id as string));
+    enabled = enabled.filter((id) => opened.has(id));
+  }
   if (enabled.length === 0) return;
 
   const { data: subs } = await admin

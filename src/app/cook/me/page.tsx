@@ -36,7 +36,17 @@ export default async function CookMyPage() {
   ];
   return (
     <>
-      <PageHeader title="マイ" />
+      <PageHeader
+        title="マイ"
+        action={
+          // CondoFit も使える人だけ（CondoCook だけの家族は CondoFit に入れない）
+          member.apps === "all" ? (
+            <Link href="/" className="rounded-full border border-border px-3 py-1.5 text-sm">
+              CondoFit へ <span aria-hidden>›</span>
+            </Link>
+          ) : null
+        }
+      />
       <ul className="mx-4 mb-4 divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface">
         {lists.map((l) => (
           <li key={l.href}>
