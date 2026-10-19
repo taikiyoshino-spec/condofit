@@ -708,6 +708,12 @@ await test("食材マスタ: 家族も読める・追加は自分名義で・変
   assert.equal((await asE("update ingredients set name = 'x' where id = $1 returning id", [id])).length, 0, "家族は変更できない");
   assert.equal((await as("C", "update ingredients set fridge_days = 5 where id = $1 returning id", [id])).length, 0, "メンバーも変更できない");
   assert.equal((await as("A", "update ingredients set fridge_days = 5, aliases = '{カーリーケール}' where id = $1 returning id", [id])).length, 1, "管理者は変更できる");
+
+  // 管理画面の統合: 統合元を外すと同じ名前で新しく登録できる（重複チェックは統合済みを除く）
+  const [{ id: kale2 }] = await asE("insert into ingredients (name, created_by) values ('ケール（生）', $1) returning id", [idE]);
+  assert.equal((await as("C", "update ingredients set merged_into = $2, active = false where id = $1 returning id", [kale2, id])).length, 0, "メンバーは統合できない");
+  assert.equal((await as("A", "update ingredients set merged_into = $2, active = false where id = $1 returning id", [kale2, id])).length, 1, "管理者は統合できる");
+  await asE("insert into ingredients (name, created_by) values ('ケール（生）', $1)", [idE]);
 });
 
 const recipeJson = (over = {}) =>
@@ -778,6 +784,10 @@ await test("レシピ: 削除は作成者と管理者（論理削除で見えな
   const [{ n }] = await asE("select count(*)::int n from recipe_categories");
   assert.equal(n, 8, "カテゴリは家族も読める");
   await rejects(() => asE("insert into recipe_categories (name) values ('x')"), /row-level security/);
+  // 管理画面: 管理者は追加・名前変更・並べ替え・非表示ができる
+  const [{ id: cat }] = await as("A", "insert into recipe_categories (name, display_order) values ('お弁当', 90) returning id");
+  assert.equal((await as("C", "update recipe_categories set active = false where id = $1 returning id", [cat])).length, 0, "メンバーは変更できない");
+  assert.equal((await as("A", "update recipe_categories set name = 'おべんとう', display_order = 5, active = false where id = $1 returning id", [cat])).length, 1);
 });
 
 await test("レシピの写真: 非公開バケット（2MBまで・画像のみ）", async () => {

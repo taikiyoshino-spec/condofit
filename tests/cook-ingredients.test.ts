@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { cleanIngredientName, matchIngredient, normalizeFood, searchIngredients } from "../src/lib/cook/ingredients.ts";
+import { cleanIngredientName, cleanReading, matchIngredient, mergeAliases, normalizeFood, parseAliases, searchIngredients } from "../src/lib/cook/ingredients.ts";
 
 const list = [
   { id: "1", name: "鶏もも肉", reading: "とりももにく", aliases: ["鶏もも", "とりもも", "チキンもも"] },
@@ -39,4 +39,16 @@ test("matchIngredient: 名前・読み・別名の完全一致で当てはめる
   assert.equal(matchIngredient("●溶き卵", list)?.id, "6");
   assert.equal(matchIngredient("鶏", list), null, "あいまいなものは当てはめない");
   assert.equal(matchIngredient("牛肉", list), null);
+});
+
+test("cleanReading: ひらがなにそろえる", () => {
+  assert.equal(cleanReading("タマネギ"), "たまねぎ");
+  assert.equal(cleanReading("ぎゅう ひき肉"), "ぎゅうひき", "漢字・空白は除く");
+  assert.equal(cleanReading("ベーコン"), "べーこん");
+});
+
+test("parseAliases / mergeAliases", () => {
+  assert.deepEqual(parseAliases("ねぎ、長ネギ, 白ねぎ\nネギ", "長ねぎ"), ["ねぎ", "白ねぎ"], "名前と同じ・重複は除く");
+  assert.deepEqual(parseAliases(" 、 ,"), []);
+  assert.deepEqual(mergeAliases({ name: "豚ひき肉", aliases: ["豚ミンチ"] }, { name: "ぶたひき肉", aliases: ["豚ミンチ", "豚挽肉"] }), ["豚ミンチ", "ぶたひき肉", "豚挽肉"]);
 });

@@ -4,12 +4,12 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { saveRecipeAction, type RecipeInput, type Visibility } from "@/app/actions/cook-recipes";
 import { removeRecipePhotoAction, uploadRecipePhotoAction } from "@/app/actions/cook-photos";
-import { addIngredientAction, type ImportDraft, type IngredientCategory } from "@/app/actions/cook-import";
+import { addIngredientAction, type ImportDraft } from "@/app/actions/cook-import";
 import { BottomSheet } from "@/components/bottom-sheet";
 import { showToast } from "@/components/toaster";
 import { resizeToJpeg } from "@/lib/client/resize-image";
 import { ingredientsToRows, parseTags, rowsToIngredients, type EditorItem, type EditorRow } from "@/lib/cook/editor";
-import { cleanIngredientName, matchIngredient, searchIngredients } from "@/lib/cook/ingredients";
+import { INGREDIENT_CATEGORIES, cleanIngredientName, matchIngredient, searchIngredients, type IngredientCategory } from "@/lib/cook/ingredients";
 import { PHOTO_FULL_SIDE, PHOTO_THUMB_SIDE, recipePhotoUrl } from "@/lib/cook/photo";
 import type { Category, IngredientOption, RecipeDetail } from "@/lib/cook/queries";
 
@@ -69,7 +69,6 @@ function fromImport(d: ImportDraft): Form {
   };
 }
 
-const INGREDIENT_CATEGORIES: IngredientCategory[] = ["肉", "魚介", "野菜", "果物", "卵・乳製品", "豆腐・大豆製品", "米・パン・麺", "調味料", "乾物・粉", "その他"];
 
 function loadDraft(): Form | null {
   try {

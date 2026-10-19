@@ -4,6 +4,10 @@
 export type IngredientLike = { id: string; name: string; reading: string; aliases: string[] };
 
 /** 比較用: 全角半角・カタカナ/ひらがな・大文字小文字・空白の違いを無視 */
+/** 食材の分類（DB の check 制約と同じ並び） */
+export const INGREDIENT_CATEGORIES = ["肉", "魚介", "野菜", "果物", "卵・乳製品", "豆腐・大豆製品", "米・パン・麺", "調味料", "乾物・粉", "その他"] as const;
+export type IngredientCategory = (typeof INGREDIENT_CATEGORIES)[number];
+
 export function normalizeFood(s: string): string {
   return s
     .normalize("NFKC")
@@ -54,4 +58,27 @@ export function matchIngredient<T extends IngredientLike>(raw: string, list: T[]
     if (hit) return hit;
   }
   return null;
+}
+
+/** 読みをひらがなにそろえる（カタカナ入力も可。ひらがなと長音以外は除く） */
+export function cleanReading(raw: string): string {
+  return normalizeFood(raw).replace(/[^ぁ-ゟー]/g, "").slice(0, 60);
+}
+
+/** 別名の入力（「、」「,」・改行区切り）を配列にする。名前と同じもの・重複は除く */
+export function parseAliases(raw: string, name = ""): string[] {
+  const seen = new Set([normalizeFood(name)]);
+  const out: string[] = [];
+  for (const a of raw.normalize("NFC").split(/[、,，\n]/)) {
+    const alias = a.trim();
+    if (!alias || [...alias].length > 30 || seen.has(normalizeFood(alias))) continue;
+    seen.add(normalizeFood(alias));
+    out.push(alias);
+  }
+  return out.slice(0, 20);
+}
+
+/** 統合したとき、統合先の別名に統合元の名前と別名を足す（統合元の名前でも見つかるように） */
+export function mergeAliases(into: { name: string; aliases: string[] }, from: { name: string; aliases: string[] }): string[] {
+  return parseAliases([...into.aliases, from.name, ...from.aliases].join("、"), into.name);
 }

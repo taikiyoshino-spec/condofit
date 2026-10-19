@@ -21,6 +21,14 @@ export default async function CookMyPage() {
           {mine}件 <span aria-hidden>›</span>
         </span>
       </Link>
+      {member.role === "admin" && member.apps === "all" && (
+        <Link href="/cook/admin" className="mx-4 mb-4 flex items-center justify-between rounded-xl border border-border bg-surface p-4">
+          <span>管理（食材の一覧・カテゴリ）</span>
+          <span className="text-muted" aria-hidden>
+            ›
+          </span>
+        </Link>
+      )}
       <Section title="写真">
         <AvatarForm userId={member.id} name={member.displayName} avatarPath={me?.avatarPath ?? null} />
         <p className="mt-3 text-xs text-muted">グループのメンバーにだけ表示されます。CondoFit と共通です。</p>

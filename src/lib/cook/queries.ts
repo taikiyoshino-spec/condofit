@@ -161,3 +161,42 @@ export async function listIngredients(): Promise<IngredientOption[]> {
   if (error) throw error;
   return data.map((i) => ({ id: i.id as string, name: i.name as string, reading: i.reading as string, aliases: (i.aliases as string[]) ?? [] }));
 }
+
+// ---- 管理画面 ----
+
+export type AdminCategory = Category & { active: boolean };
+
+/** カテゴリ（非表示も含む、表示順） */
+export async function listAllCategories(): Promise<AdminCategory[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("recipe_categories").select("id, name, active").order("display_order").order("name");
+  if (error) throw error;
+  return data.map((c) => ({ id: c.id as string, name: c.name as string, active: c.active as boolean }));
+}
+
+export type AdminIngredient = IngredientOption & {
+  category: string;
+  active: boolean;
+  /** メンバーがレシピ登録中に追加した食材（初期データは null） */
+  createdBy: string | null;
+};
+
+/** 食材マスタ（非表示も含む。統合済みは除く） */
+export async function listAllIngredients(): Promise<AdminIngredient[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("ingredients")
+    .select("id, name, reading, aliases, category, active, created_by")
+    .is("merged_into", null)
+    .order("reading");
+  if (error) throw error;
+  return data.map((i) => ({
+    id: i.id as string,
+    name: i.name as string,
+    reading: i.reading as string,
+    aliases: (i.aliases as string[]) ?? [],
+    category: i.category as string,
+    active: i.active as boolean,
+    createdBy: (i.created_by as string | null) ?? null,
+  }));
+}

@@ -161,4 +161,4 @@ PWA:
 5. 登録・編集画面（手入力）、写真 … ✅ 2026-10-18（`src/app/cook/recipe-editor.tsx`、写真は `20261018000006_cook_recipe_photos.sql`・`src/app/actions/cook-photos.ts`・`/api/cook/photo`。食材マスタへの追加は 6 で）
 6. URL取り込み、AI の当てはめ … ✅ 2026-10-18（`src/lib/cook/import.ts`・`fetch-page.ts`（接続時に名前解決の結果を確認しローカル・社内アドレスを拒否）・`ai.ts`・`src/lib/ai/gemini.ts`、`src/app/actions/cook-import.ts`。環境変数 `GEMINI_API_KEY`／`GEMINI_MODEL`（初期値 gemini-2.5-flash）。食材マスタへの追加は登録画面の材料の候補から）
 7. 作るモード … ✅ 2026-10-18（`src/app/cook/r/[id]/cook/`、`src/lib/cook/cook-mode.ts`。Permissions-Policy は全体で `microphone=(self)` に変更）
-8. 管理画面（家族・家族ユーザー・食材マスタ・カテゴリ）
+8. 管理画面（家族・家族ユーザー・食材マスタ・カテゴリ） … 一部 ✅ 2026-10-19（`/cook/admin`：食材の一覧の修正・非表示・統合、カテゴリの追加・名前変更・並べ替え・非表示。マイグレーションなし。統合は統合元を `merged_into` で外し、名前と別名を統合先の別名に足す。登録済みレシピの材料は名前で表示するのでそのまま）。**家族の管理・家族ユーザーの作成は保留**：利用者が CondoFit のメンバーだけのため（2026-10-19 確認）。必要になったら書き込み用の RPC を足して作る

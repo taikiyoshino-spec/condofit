@@ -63,3 +63,10 @@ export async function requireCookUser(): Promise<Member> {
   if (!member) redirect("/login?next=/cook");
   return member;
 }
+
+/** CondoCook の管理者（CondoFit の管理者と同じ。DB の is_admin() と同じ条件） */
+export async function requireCookAdmin(): Promise<Member> {
+  const member = await requireCookUser();
+  if (member.role !== "admin" || member.apps !== "all") redirect("/cook");
+  return member;
+}

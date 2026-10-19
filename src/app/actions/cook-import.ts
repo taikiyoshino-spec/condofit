@@ -6,7 +6,7 @@ import { aiAvailable } from "@/lib/ai/gemini";
 import { aiExtractRecipe, aiMatchIngredients } from "@/lib/cook/ai";
 import { fetchRecipePage } from "@/lib/cook/fetch-page";
 import { extractRecipeFromHtml, pageText, siteName, type ImportedRecipe } from "@/lib/cook/import";
-import { matchIngredient, normalizeFood } from "@/lib/cook/ingredients";
+import { INGREDIENT_CATEGORIES, cleanReading, matchIngredient, type IngredientCategory } from "@/lib/cook/ingredients";
 import { listIngredients, type IngredientOption } from "@/lib/cook/queries";
 
 // レシピサイトのURLから下書きを作る（RECIPE_SPEC.md D12・D13）。
@@ -49,8 +49,6 @@ export async function importRecipeAction(url: string): Promise<ImportResult> {
   return { ok: true, draft: { ...recipe, sourceUrl: page.finalUrl, ingredients }, usedAi };
 }
 
-const CATEGORIES = ["肉", "魚介", "野菜", "果物", "卵・乳製品", "豆腐・大豆製品", "米・パン・麺", "調味料", "乾物・粉", "その他"] as const;
-export type IngredientCategory = (typeof CATEGORIES)[number];
 
 /** 食材マスタにない食材を追加する（名前・読み・分類だけ。日数などは管理者が整える。D7） */
 export async function addIngredientAction(
@@ -61,9 +59,9 @@ export async function addIngredientAction(
   const member = await requireCookUser();
   const name = String(rawName ?? "").normalize("NFC").trim();
   if (!name || [...name].length > 30) return { ok: false, error: "食材名を30文字以内で入力してください" };
-  if (!CATEGORIES.includes(category)) return { ok: false, error: "分類を選んでください" };
+  if (!INGREDIENT_CATEGORIES.includes(category)) return { ok: false, error: "分類を選んでください" };
   // 読みはひらがなにそろえる（カタカナ入力も可）
-  const reading = normalizeFood(String(rawReading ?? "")).replace(/[^ぁ-ゟー]/g, "").slice(0, 60);
+  const reading = cleanReading(String(rawReading ?? ""));
 
   const existing = matchIngredient(name, await listIngredients());
   if (existing) return { ok: true, ingredient: existing };
