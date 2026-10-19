@@ -13,13 +13,17 @@ const SCOPES: { value: Scope; label: string }[] = [
 
 /** レシピ一覧（検索・カテゴリ・みんな／家族／自分） */
 export default async function CookHomePage({ searchParams }: PageProps<"/cook">) {
-  const member = await requireCookUser();
   const sp = await searchParams;
   const scope: Scope = sp.scope === "household" || sp.scope === "mine" ? sp.scope : "all";
   const q = typeof sp.q === "string" ? sp.q.slice(0, 50) : "";
   const categoryId = typeof sp.cat === "string" ? sp.cat : null;
 
-  const [recipes, categories, householdIds] = await Promise.all([listRecipes(), listCategories(), myHouseholdMemberIds()]);
+  const [member, recipes, categories, householdIds] = await Promise.all([
+    requireCookUser(),
+    listRecipes(),
+    listCategories(),
+    myHouseholdMemberIds(),
+  ]);
   const shown = filterRecipes(recipes, { scope, q, categoryId, myId: member.id, householdIds });
   const categoryNames = new Map(categories.map((c) => [c.id, c.name]));
 

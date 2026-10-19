@@ -1,4 +1,5 @@
 import "server-only";
+import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 
 // CondoCook の読み取り。見える範囲（グループ／家族だけ／自分だけ）は RLS で絞られている
@@ -89,7 +90,7 @@ export async function listRecipes(): Promise<RecipeSummary[]> {
   );
 }
 
-export async function getRecipe(id: string): Promise<RecipeDetail | null> {
+export const getRecipe = cache(async (id: string): Promise<RecipeDetail | null> => {
   const supabase = await createClient();
   const { data } = await supabase
     .from("recipes")
@@ -129,15 +130,17 @@ export async function getRecipe(id: string): Promise<RecipeDetail | null> {
       .map((i) => ({ ingredientId: i.ingredient_id, name: i.name, amount: i.amount, optional: i.optional, section: i.section })),
     steps: [...r.recipe_steps].sort((a, b) => a.position - b.position).map((s) => s.body),
   };
-}
+});
 
 /** 自分の家族のメンバー（自分を含む） */
-export async function myHouseholdMemberIds(): Promise<string[]> {
+export const myHouseholdMemberIds = cache(async (): Promise<string[]> => {
   const supabase = await createClient();
-  const { data } = await supabase.from("household_members").select("user_id, household_id");
-  const { data: mine } = await supabase.rpc("my_household_id");
+  const [{ data }, { data: mine }] = await Promise.all([
+    supabase.from("household_members").select("user_id, household_id"),
+    supabase.rpc("my_household_id"),
+  ]);
   return (data ?? []).filter((m) => m.household_id === mine).map((m) => m.user_id as string);
-}
+});
 
 /** 自分の家族の人数（人数分の換算の初期値。D18） */
 export async function myHouseholdSize(): Promise<number> {

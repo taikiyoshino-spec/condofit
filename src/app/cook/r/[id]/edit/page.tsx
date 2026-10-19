@@ -8,10 +8,14 @@ const UUID_RE = /^[0-9a-f-]{36}$/i;
 
 /** 自分のレシピの編集（他人のレシピは「コピーしてアレンジ」。DB側でも作成者以外は保存できない） */
 export default async function EditRecipePage({ params }: PageProps<"/cook/r/[id]/edit">) {
-  const member = await requireCookUser();
   const { id } = await params;
   if (!UUID_RE.test(id)) notFound();
-  const [recipe, categories, ingredients] = await Promise.all([getRecipe(id), listCategories(), listIngredients()]);
+  const [member, recipe, categories, ingredients] = await Promise.all([
+    requireCookUser(),
+    getRecipe(id),
+    listCategories(),
+    listIngredients(),
+  ]);
   if (!recipe || recipe.ownerId !== member.id) notFound();
   return (
     <>

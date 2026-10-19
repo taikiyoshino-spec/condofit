@@ -8,9 +8,9 @@ const UUID_RE = /^[0-9a-f-]{36}$/i;
 
 /** レシピの登録（URLから取り込み・手入力）。?copy=<id> で見えるレシピをコピーしてアレンジ */
 export default async function NewRecipePage({ searchParams }: PageProps<"/cook/new">) {
-  await requireCookUser();
   const { copy } = await searchParams;
-  const [categories, ingredients, copyFrom] = await Promise.all([
+  const [, categories, ingredients, copyFrom] = await Promise.all([
+    requireCookUser(),
     listCategories(),
     listIngredients(),
     typeof copy === "string" && UUID_RE.test(copy) ? getRecipe(copy) : Promise.resolve(null),

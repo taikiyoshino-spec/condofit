@@ -12,10 +12,14 @@ const UUID_RE = /^[0-9a-f-]{36}$/i;
 const VISIBILITY_LABEL = { group: "グループに公開", household: "家族だけに公開", private: "自分だけ" } as const;
 
 export default async function RecipePage({ params }: PageProps<"/cook/r/[id]">) {
-  const member = await requireCookUser();
   const { id } = await params;
   if (!UUID_RE.test(id)) notFound();
-  const [recipe, categories, householdSize] = await Promise.all([getRecipe(id), listCategories(), myHouseholdSize()]);
+  const [member, recipe, categories, householdSize] = await Promise.all([
+    requireCookUser(),
+    getRecipe(id),
+    listCategories(),
+    myHouseholdSize(),
+  ]);
   if (!recipe) notFound();
   const category = categories.find((c) => c.id === recipe.categoryId)?.name;
   const isOwner = recipe.ownerId === member.id;

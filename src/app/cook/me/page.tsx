@@ -9,8 +9,7 @@ import { DisplayNameForm, PinForm } from "@/app/(app)/mypage/profile/forms";
 
 /** CondoCook のマイページ（自分のレシピの数、名前・アイコン・PIN。CondoCook だけの家族もここで変更できる） */
 export default async function CookMyPage() {
-  const member = await requireCookUser();
-  const [profiles, recipes] = await Promise.all([listMemberProfiles(), listRecipes()]);
+  const [member, profiles, recipes] = await Promise.all([requireCookUser(), listMemberProfiles(), listRecipes()]);
   const me = profiles.find((p) => p.id === member.id);
   const mine = recipes.filter((r) => r.ownerId === member.id).length;
   return (
