@@ -10,3 +10,9 @@ export function recipePhotoUrl(recipeId: string, path: string, size: "full" | "t
   const v = path.split("/").pop()?.split(".")[0] ?? "";
   return `/api/cook/photo/${recipeId}?size=${size}&v=${v}`;
 }
+
+/** 「作った」の写真の配信URL（レシピの写真と同じ作り） */
+export function cookPhotoUrl(cookId: string, path: string, size: "full" | "thumb"): string {
+  const v = path.split("/").pop()?.split(".")[0] ?? "";
+  return `/api/cook/cooked-photo/${cookId}?size=${size}&v=${v}`;
+}

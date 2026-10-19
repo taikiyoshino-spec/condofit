@@ -19,6 +19,9 @@ export type RecipeSummary = {
   thumbPath: string | null;
   createdAt: string;
   ingredientNames: string[];
+  /** 作られた回数（作成者本人の分を除く）・お気に入りの数 */
+  cookedCount: number;
+  favoriteCount: number;
 };
 
 export type RecipeIngredient = {
@@ -57,9 +60,12 @@ type SummaryRow = {
   tags: string[];
   thumb_path: string | null;
   created_at: string;
+  cooked_count: number;
+  favorite_count: number;
 };
 
-const SUMMARY = "id, title, owner_user_id, visibility, servings, cook_minutes, category_id, tags, thumb_path, created_at";
+const SUMMARY =
+  "id, title, owner_user_id, visibility, servings, cook_minutes, category_id, tags, thumb_path, created_at, cooked_count, favorite_count";
 
 const toSummary = (r: SummaryRow, ingredientNames: string[] = []): RecipeSummary => ({
   id: r.id,
@@ -73,6 +79,8 @@ const toSummary = (r: SummaryRow, ingredientNames: string[] = []): RecipeSummary
   thumbPath: r.thumb_path,
   createdAt: r.created_at,
   ingredientNames,
+  cookedCount: r.cooked_count ?? 0,
+  favoriteCount: r.favorite_count ?? 0,
 });
 
 /** 自分に見えるレシピ（新しい順。少人数の仲間内なので絞り込みは画面側で行う） */
@@ -199,4 +207,61 @@ export async function listAllIngredients(): Promise<AdminIngredient[]> {
     active: i.active as boolean,
     createdBy: (i.created_by as string | null) ?? null,
   }));
+}
+
+// ---- 反応（作った・お気に入り・作りたい・コメント） ----
+
+export type CookLog = { id: string; userId: string; note: string | null; photoPath: string | null; thumbPath: string | null; cookedAt: string };
+export type RecipeComment = { id: string; userId: string; body: string; createdAt: string };
+export type RecipeReactions = { cooks: CookLog[]; comments: RecipeComment[]; favorite: boolean; want: boolean };
+
+/** レシピの「みんなの作った」・コメントと、自分のお気に入り・作りたい */
+export async function getRecipeReactions(recipeId: string, myId: string): Promise<RecipeReactions> {
+  const supabase = await createClient();
+  const [cooks, comments, fav, want] = await Promise.all([
+    supabase.from("recipe_cooks").select("id, user_id, note, photo_path, thumb_path, cooked_at").eq("recipe_id", recipeId).order("cooked_at", { ascending: false }).limit(50),
+    supabase.from("recipe_comments").select("id, user_id, body, created_at").eq("recipe_id", recipeId).order("created_at").limit(200),
+    supabase.from("recipe_favorites").select("recipe_id").eq("recipe_id", recipeId).eq("user_id", myId).maybeSingle(),
+    supabase.from("recipe_wants").select("recipe_id").eq("recipe_id", recipeId).eq("user_id", myId).maybeSingle(),
+  ]);
+  return {
+    cooks: (cooks.data ?? []).map((c) => ({
+      id: c.id as string,
+      userId: c.user_id as string,
+      note: (c.note as string | null) ?? null,
+      photoPath: (c.photo_path as string | null) ?? null,
+      thumbPath: (c.thumb_path as string | null) ?? null,
+      cookedAt: c.cooked_at as string,
+    })),
+    comments: (comments.data ?? []).map((c) => ({ id: c.id as string, userId: c.user_id as string, body: c.body as string, createdAt: c.created_at as string })),
+    favorite: Boolean(fav.data),
+    want: Boolean(want.data),
+  };
+}
+
+/** 自分のお気に入り・作りたいのレシピ（一覧の絞り込み用） */
+export const myRecipeMarks = cache(async (): Promise<{ favorites: string[]; wants: string[] }> => {
+  const supabase = await createClient();
+  const [fav, want] = await Promise.all([
+    supabase.from("recipe_favorites").select("recipe_id"),
+    supabase.from("recipe_wants").select("recipe_id"),
+  ]);
+  return {
+    favorites: (fav.data ?? []).map((r) => r.recipe_id as string),
+    wants: (want.data ?? []).map((r) => r.recipe_id as string),
+  };
+});
+
+export type RankingRow = { id: string; n: number };
+export type CookRanking = { recipe: RankingRow[]; cook: RankingRow[]; post: RankingRow[] };
+
+/** 月ごとのランキング（グループ公開のレシピだけ。D21・D22）。month は "YYYY-MM-01" */
+export async function getCookRanking(month: string): Promise<CookRanking> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("cook_monthly_ranking", { p_month: month });
+  if (error) throw error;
+  const out: CookRanking = { recipe: [], cook: [], post: [] };
+  for (const r of (data ?? []) as { board: keyof CookRanking; id: string; n: number }[]) out[r.board]?.push({ id: r.id, n: r.n });
+  for (const k of Object.keys(out) as (keyof CookRanking)[]) out[k].sort((a, b) => b.n - a.n);
+  return out;
 }

@@ -26,3 +26,14 @@ test("filterRecipes: 料理名・材料名・タグで検索（カタカナ・�
 test("filterRecipes: カテゴリ", () => {
   assert.deepEqual(ids(filterRecipes(list, { ...base, categoryId: "main" })), ["2"]);
 });
+
+test("filterRecipes: お気に入り・作りたいの一覧（onlyIds）", () => {
+  const rows = [
+    { id: "a", title: "親子丼", ownerId: "me", categoryId: null, tags: [], ingredientNames: [] },
+    { id: "b", title: "唐揚げ", ownerId: "x", categoryId: null, tags: [], ingredientNames: [] },
+  ];
+  const opt = { scope: "all" as const, q: "", categoryId: null, myId: "me", householdIds: ["me"] };
+  assert.deepEqual(filterRecipes(rows, { ...opt, onlyIds: ["b"] }).map((r) => r.id), ["b"]);
+  assert.deepEqual(filterRecipes(rows, { ...opt, onlyIds: [] }), []);
+  assert.equal(filterRecipes(rows, opt).length, 2);
+});

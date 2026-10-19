@@ -8,14 +8,16 @@ import { createClient } from "@/lib/supabase/client";
 import { formatNotification, type NotificationRow } from "@/lib/notifications/format";
 import { relativeMinutes } from "@/lib/client/time";
 
-async function fetchNotifications(): Promise<NotificationRow[]> {
+export type BellScope = "fit" | "cook";
+
+async function fetchNotifications(scope: BellScope): Promise<NotificationRow[]> {
   const supabase = createClient();
-  // RLS により自分宛て・7日以内（期限内）のみ返る
-  const { data } = await supabase
+  // RLS により自分宛て・7日以内（期限内）のみ返る。CondoFit と CondoCook で分けて出す
+  let query = supabase
     .from("notifications")
-    .select("id, type, payload, created_at, read_at, actor_user_id, actor:users!notifications_actor_user_id_fkey(display_name)")
-    .order("created_at", { ascending: false })
-    .limit(100);
+    .select("id, type, payload, created_at, read_at, actor_user_id, actor:users!notifications_actor_user_id_fkey(display_name)");
+  query = scope === "cook" ? query.like("type", "cook\\_%") : query.not("type", "like", "cook\\_%");
+  const { data } = await query.order("created_at", { ascending: false }).limit(100);
   return (data ?? []).map((n) => ({
     id: n.id as string,
     type: n.type as string,
@@ -27,7 +29,7 @@ async function fetchNotifications(): Promise<NotificationRow[]> {
   }));
 }
 
-export function NotificationBell({ myId }: { myId: string }) {
+export function NotificationBell({ myId, scope = "fit" }: { myId: string; scope?: BellScope }) {
   const router = useRouter();
   const [items, setItems] = useState<NotificationRow[]>([]);
   const [open, setOpen] = useState(false);
@@ -35,15 +37,15 @@ export function NotificationBell({ myId }: { myId: string }) {
   const unread = items.filter((n) => !n.readAt).length;
 
   const refresh = useCallback(async () => {
-    setItems(await fetchNotifications());
+    setItems(await fetchNotifications(scope));
     setNow(Date.now());
-  }, []);
+  }, [scope]);
 
   useEffect(() => {
     const supabase = createClient();
     const initial = setTimeout(() => void refresh(), 0);
     const channel = supabase
-      .channel(`bell:${myId}`)
+      .channel(`bell:${scope}:${myId}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "notifications", filter: `recipient_user_id=eq.${myId}` },
@@ -54,7 +56,7 @@ export function NotificationBell({ myId }: { myId: string }) {
       clearTimeout(initial);
       void supabase.removeChannel(channel);
     };
-  }, [myId, refresh]);
+  }, [myId, scope, refresh]);
 
   const markRead = async (ids: string[]) => {
     if (ids.length === 0) return;
@@ -63,11 +65,8 @@ export function NotificationBell({ myId }: { myId: string }) {
     await createClient().from("notifications").update({ read_at: readAt }).in("id", ids);
   };
 
-  const markAllRead = async () => {
-    const readAt = new Date().toISOString();
-    setItems((list) => list.map((n) => ({ ...n, readAt: n.readAt ?? readAt })));
-    await createClient().rpc("mark_all_notifications_read");
-  };
+  // 表示している側（CondoFit / CondoCook）の通知だけ既読にする
+  const markAllRead = () => markRead(items.filter((n) => !n.readAt).map((n) => n.id));
 
   return (
     <>

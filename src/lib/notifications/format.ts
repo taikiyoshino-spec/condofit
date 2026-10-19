@@ -14,6 +14,10 @@ export type NotificationRow = {
 const slot = (v: unknown) => TIME_SLOT_LABEL[v as TimeSlot] ?? "";
 const day = (v: unknown) => (typeof v === "string" ? formatDate(v, { withWeekday: false }) : "");
 
+const title = (p: Record<string, unknown>) => (typeof p.title === "string" ? p.title : "レシピ");
+const excerpt = (p: Record<string, unknown>) => (typeof p.excerpt === "string" && p.excerpt ? p.excerpt : undefined);
+const recipeHref = (p: Record<string, unknown>) => (typeof p.recipe_id === "string" ? `/cook/r/${p.recipe_id}` : "/cook");
+
 /** 通知の表示文言と遷移先 */
 export function formatNotification(n: NotificationRow): { text: string; sub?: string; href: string } {
   const who = n.actorName ? `${n.actorName}さん` : "メンバー";
@@ -50,6 +54,14 @@ export function formatNotification(n: NotificationRow): { text: string; sub?: st
         sub: typeof p.excerpt === "string" ? p.excerpt : undefined,
         href: typeof p.date === "string" ? `/schedule/${p.date}` : "/schedule",
       };
+    case "cook_cooked":
+      return { text: `${who}が「${title(p)}」を作りました`, sub: excerpt(p), href: recipeHref(p) };
+    case "cook_comment":
+      return { text: `${who}が「${title(p)}」にコメントしました`, sub: excerpt(p), href: `${recipeHref(p)}#comments` };
+    case "cook_favorite":
+      return { text: `${who}が「${title(p)}」をお気に入りにしました`, href: recipeHref(p) };
+    case "cook_new_recipe":
+      return { text: `${who}が新しいレシピ「${title(p)}」を登録しました`, href: recipeHref(p) };
     default:
       return { text: "お知らせがあります", href: "/" };
   }

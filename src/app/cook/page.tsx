@@ -1,15 +1,17 @@
 import Link from "next/link";
 import { requireCookUser } from "@/lib/auth/session";
-import { listCategories, listRecipes, myHouseholdMemberIds } from "@/lib/cook/queries";
+import { listCategories, listRecipes, myHouseholdMemberIds, myRecipeMarks } from "@/lib/cook/queries";
 import { filterRecipes, type Scope } from "@/lib/cook/filter";
 import { PageHeader } from "@/components/page";
 import { RecipeListItem } from "./recipe-list-item";
+import { NotificationBell } from "@/app/(app)/notification-bell";
 
 const SCOPES: { value: Scope; label: string }[] = [
   { value: "all", label: "みんな" },
   { value: "household", label: "家族" },
   { value: "mine", label: "自分" },
 ];
+const MARKS = { fav: "お気に入り", want: "作りたい" } as const;
 
 /** レシピ一覧（検索・カテゴリ・みんな／家族／自分） */
 export default async function CookHomePage({ searchParams }: PageProps<"/cook">) {
@@ -17,19 +19,22 @@ export default async function CookHomePage({ searchParams }: PageProps<"/cook">)
   const scope: Scope = sp.scope === "household" || sp.scope === "mine" ? sp.scope : "all";
   const q = typeof sp.q === "string" ? sp.q.slice(0, 50) : "";
   const categoryId = typeof sp.cat === "string" ? sp.cat : null;
+  const mark = sp.list === "fav" || sp.list === "want" ? sp.list : null;
 
-  const [member, recipes, categories, householdIds] = await Promise.all([
+  const [member, recipes, categories, householdIds, marks] = await Promise.all([
     requireCookUser(),
     listRecipes(),
     listCategories(),
     myHouseholdMemberIds(),
+    myRecipeMarks(),
   ]);
-  const shown = filterRecipes(recipes, { scope, q, categoryId, myId: member.id, householdIds });
+  const onlyIds = mark === "fav" ? marks.favorites : mark === "want" ? marks.wants : undefined;
+  const shown = filterRecipes(recipes, { scope, q, categoryId, myId: member.id, householdIds, onlyIds });
   const categoryNames = new Map(categories.map((c) => [c.id, c.name]));
 
   const href = (over: Record<string, string | null>) => {
     const params = new URLSearchParams();
-    const merged = { scope: scope === "all" ? null : scope, q: q || null, cat: categoryId, ...over };
+    const merged = { scope: scope === "all" ? null : scope, q: q || null, cat: categoryId, list: mark, ...over };
     for (const [k, v] of Object.entries(merged)) if (v) params.set(k, v);
     const s = params.toString();
     return s ? `/cook?${s}` : "/cook";
@@ -37,10 +42,11 @@ export default async function CookHomePage({ searchParams }: PageProps<"/cook">)
 
   return (
     <>
-      <PageHeader title="レシピ" />
+      <PageHeader title={mark ? MARKS[mark] : "レシピ"} back={mark ? "/cook/me" : undefined} action={<NotificationBell myId={member.id} scope="cook" />} />
       <form action="/cook" className="mx-4 mb-3">
         {scope !== "all" && <input type="hidden" name="scope" value={scope} />}
         {categoryId && <input type="hidden" name="cat" value={categoryId} />}
+        {mark && <input type="hidden" name="list" value={mark} />}
         <input
           type="search"
           name="q"
@@ -92,6 +98,8 @@ export default async function CookHomePage({ searchParams }: PageProps<"/cook">)
                 最初のレシピを登録する ›
               </Link>
             </>
+          ) : mark && onlyIds?.length === 0 ? (
+            mark === "fav" ? "お気に入りはまだありません。レシピの「♡ お気に入り」で入れられます" : "「作りたい」はまだありません。レシピの「☆ 作りたい」で入れられます"
           ) : (
             "条件に合うレシピがありません"
           )}

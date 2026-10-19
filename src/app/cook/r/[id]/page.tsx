@@ -1,26 +1,30 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireCookUser } from "@/lib/auth/session";
-import { getRecipe, listCategories, myHouseholdSize } from "@/lib/cook/queries";
+import { getRecipe, getRecipeReactions, listCategories, myHouseholdSize } from "@/lib/cook/queries";
 import { PageHeader } from "@/components/page";
 import { recipePhotoUrl } from "@/lib/cook/photo";
 import { Owner } from "../../owner";
 import { IngredientList } from "./ingredient-list";
 import { DeleteRecipeButton } from "./delete-button";
+import { CookLogs, ReactionBar, RecipeComments } from "./reactions";
 
 const UUID_RE = /^[0-9a-f-]{36}$/i;
 const VISIBILITY_LABEL = { group: "グループに公開", household: "家族だけに公開", private: "自分だけ" } as const;
 
-export default async function RecipePage({ params }: PageProps<"/cook/r/[id]">) {
+export default async function RecipePage({ params, searchParams }: PageProps<"/cook/r/[id]">) {
   const { id } = await params;
   if (!UUID_RE.test(id)) notFound();
-  const [member, recipe, categories, householdSize] = await Promise.all([
-    requireCookUser(),
+  const member = await requireCookUser();
+  const [recipe, categories, householdSize, reactions] = await Promise.all([
     getRecipe(id),
     listCategories(),
     myHouseholdSize(),
+    getRecipeReactions(id, member.id),
   ]);
   if (!recipe) notFound();
+  const isAdmin = member.role === "admin" && member.apps === "all";
+  const openCooked = (await searchParams).cooked === "1";
   const category = categories.find((c) => c.id === recipe.categoryId)?.name;
   const isOwner = recipe.ownerId === member.id;
 
@@ -75,6 +79,15 @@ export default async function RecipePage({ params }: PageProps<"/cook/r/[id]">) 
         </div>
       </header>
 
+      <ReactionBar
+        recipeId={recipe.id}
+        favorite={reactions.favorite}
+        want={reactions.want}
+        favoriteCount={recipe.favoriteCount}
+        cookedCount={recipe.cookedCount}
+        openCooked={openCooked}
+      />
+
       <IngredientList recipeId={recipe.id} ingredients={recipe.ingredients} servings={recipe.servings} initialServings={recipe.servings ? householdSize : null} />
 
       <section className="mx-4 mb-4">
@@ -98,7 +111,10 @@ export default async function RecipePage({ params }: PageProps<"/cook/r/[id]">) 
         </section>
       )}
 
-      {(isOwner || member.role === "admin") && (
+      <CookLogs recipeId={recipe.id} cooks={reactions.cooks} myId={member.id} isAdmin={isAdmin} />
+      <RecipeComments recipeId={recipe.id} comments={reactions.comments} myId={member.id} isAdmin={isAdmin} />
+
+      {(isOwner || isAdmin) && (
         <div className="mx-4 mt-6">
           <DeleteRecipeButton recipeId={recipe.id} title={recipe.title} />
         </div>

@@ -55,3 +55,12 @@ test("実績コメントの通知は「10/3の実績にコメントしました�
   assert.equal(f.sub, "夕方は空いてた！");
   assert.equal(f.href, "/schedule/2026-10-03");
 });
+
+test("CondoCook の通知はレシピへ", () => {
+  const f = formatNotification(n("cook_comment", { recipe_id: sid, title: "親子丼", excerpt: "何人分？" }, "B"));
+  assert.equal(f.text, "Bさんが「親子丼」にコメントしました");
+  assert.equal(f.sub, "何人分？");
+  assert.equal(f.href, `/cook/r/${sid}#comments`);
+  assert.equal(formatNotification(n("cook_cooked", { recipe_id: sid, title: "親子丼", excerpt: "" })).sub, undefined, "一言なし");
+  assert.equal(formatNotification(n("cook_new_recipe", {})).href, "/cook");
+});

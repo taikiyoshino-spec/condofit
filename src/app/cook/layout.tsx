@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { MembersProvider } from "@/components/avatar";
 import { Toaster } from "@/components/toaster";
 import { CookNav } from "./cook-nav";
+import { CookEffects } from "./cook-effects";
 
 // CondoCook（レシピ共有・食材管理）。CondoFit のタブやメニューは出さない（RECIPE_SPEC.md D25）
 export const metadata: Metadata = {
@@ -28,6 +29,7 @@ export default async function CookLayout({ children }: LayoutProps<"/cook">) {
         {children}
         <Toaster />
         <CookNav />
+        <CookEffects />
       </div>
     </MembersProvider>
   );

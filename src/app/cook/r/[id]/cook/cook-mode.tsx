@@ -288,8 +288,11 @@ export function CookMode({
             <section className="pt-10 text-center">
               <p className="text-3xl font-bold">できあがり！</p>
               <p className="mt-2 text-muted">おつかれさまでした</p>
-              <Link href={`/cook/r/${recipeId}`} className="mt-8 inline-block rounded-xl bg-accent px-6 py-3 font-semibold text-accent-fg">
-                レシピに戻る
+              <Link href={`/cook/r/${recipeId}?cooked=1`} className="mt-8 inline-block rounded-xl bg-accent px-6 py-3 font-semibold text-accent-fg">
+                「作った！」を記録する
+              </Link>
+              <Link href={`/cook/r/${recipeId}`} className="mt-4 block text-sm text-muted underline">
+                記録しないでレシピに戻る
               </Link>
             </section>
           )}

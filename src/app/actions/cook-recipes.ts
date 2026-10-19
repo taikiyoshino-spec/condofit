@@ -1,9 +1,11 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { requireCookUser } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { parseAmount } from "@/lib/cook/amount";
+import { pushCookNotifications } from "@/lib/cook/push";
 
 // CondoCook のレシピの保存・削除。権限（作成者だけ編集、削除は作成者と管理者、公開範囲）はDB側で強制している
 
@@ -88,7 +90,8 @@ function toPayload(input: RecipeInput): { error: string } | { payload: Record<st
 
 /** レシピの保存（新規は recipeId = null） */
 export async function saveRecipeAction(recipeId: string | null, input: RecipeInput): Promise<RecipeResult> {
-  await requireCookUser();
+  const member = await requireCookUser();
+  const startedAt = new Date();
   if (recipeId !== null && !UUID_RE.test(recipeId)) return { ok: false, error: "不正なレシピです" };
   const v = toPayload(input);
   if ("error" in v) return { ok: false, error: v.error };
@@ -96,6 +99,10 @@ export async function saveRecipeAction(recipeId: string | null, input: RecipeInp
   const { data, error } = await supabase.rpc("save_recipe", { p_id: recipeId, p_recipe: v.payload });
   if (error) return { ok: false, error: error.message.includes("forbidden") ? "自分のレシピだけ編集できます" : "保存できませんでした" };
   revalidatePath("/cook", "layout");
+  // 初めてグループ公開したときは、DBトリガーが仲間への通知を作っている。同じ相手にプッシュを送る
+  if (v.payload.visibility === "group") {
+    after(() => pushCookNotifications(member.id, member.displayName, data as string, "cook_new_recipe", startedAt));
+  }
   return { ok: true, id: data as string };
 }
 

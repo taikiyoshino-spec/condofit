@@ -16,6 +16,8 @@ export function RecipeListItem({ recipe, categoryName }: { recipe: RecipeSummary
         <span className="mt-1 flex flex-wrap gap-x-2 text-xs text-muted">
           {categoryName && <span>{categoryName}</span>}
           {recipe.cookMinutes && <span>{recipe.cookMinutes}分</span>}
+          {recipe.cookedCount > 0 && <span>作った {recipe.cookedCount}</span>}
+          {recipe.favoriteCount > 0 && <span>♥ {recipe.favoriteCount}</span>}
           {badge && <span className="text-warn">{badge}</span>}
         </span>
       </span>

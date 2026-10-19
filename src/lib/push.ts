@@ -3,7 +3,7 @@ import webpush from "web-push";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export type PushMessage = { title: string; body: string; url?: string; tag?: string };
-type Category = "check_in" | "location_stale" | "comment" | "schedule";
+type Category = "check_in" | "location_stale" | "comment" | "schedule" | "cook_cooked" | "cook_reaction" | "cook_new_recipe";
 
 let configured: boolean | null = null;
 function configure() {
@@ -29,21 +29,18 @@ export async function sendPush(userIds: string[], category: Category, message: P
 
   const { data: settings } = await admin
     .from("notification_settings")
-    .select("user_id, check_in, location_stale, comment, schedule, users!inner(deactivated_at)")
+    .select("user_id, check_in, location_stale, comment, schedule, cook_cooked, cook_reaction, cook_new_recipe, users!inner(deactivated_at)")
     .in("user_id", userIds)
     .is("users.deactivated_at", null);
   let enabled = (settings ?? []).filter((s) => s[category]).map((s) => s.user_id as string);
   if (enabled.length === 0) return;
 
-  // ここの通知はすべて CondoFit のもの。CondoCook だけの人（家族）には送らない
-  const { data: fitMembers } = await admin
-    .from("group_members")
-    .select("user_id")
-    .in("user_id", enabled)
-    .eq("apps", "all")
-    .is("removed_at", null);
-  const fit = new Set((fitMembers ?? []).map((m) => m.user_id as string));
-  enabled = enabled.filter((id) => fit.has(id));
+  // CondoFit の通知は CondoCook だけの人（家族）には送らない
+  let members = admin.from("group_members").select("user_id").in("user_id", enabled).is("removed_at", null);
+  if (!category.startsWith("cook_")) members = members.eq("apps", "all");
+  const { data: active } = await members;
+  const allowed = new Set((active ?? []).map((m) => m.user_id as string));
+  enabled = enabled.filter((id) => allowed.has(id));
   if (enabled.length === 0) return;
 
   const { data: subs } = await admin

@@ -800,4 +800,90 @@ await test("レシピの写真: 非公開バケット（2MBまで・画像のみ
   await rejects(() => asE("update recipes set photo_path = 'x' where id = $1", [id]), /permission denied/);
 });
 
+const notes = async (user, type) =>
+  (await asSuper("select payload from notifications where recipient_user_id = $1 and type = $2 order by created_at", [user, type])).map((n) => n.payload);
+
+await test("レシピの反応: 作った（数・作りたいから外す・作成者に通知）", async () => {
+  const [{ id }] = await as("C", "select save_recipe(null, $1::jsonb) id", [recipeJson({ title: "唐揚げ" })]);
+  const [r0] = await asSuper("select published_at, cooked_count from recipes where id = $1", [id]);
+  assert.ok(r0.published_at, "グループ公開した日時が入る");
+  await asE("insert into recipe_wants (recipe_id) values ($1)", [id]);
+  await asE("insert into recipe_cooks (recipe_id, note) values ($1, '  おいしかった ')", [id]);
+  await as("C", "insert into recipe_cooks (recipe_id) values ($1)", [id]);
+  const [r] = await asSuper("select cooked_count, updated_at = created_at as same from recipes where id = $1", [id]);
+  assert.equal(r.cooked_count, 1, "作成者本人の分は数えない");
+  assert.equal(r.same, true, "反応では更新日時を変えない");
+  assert.equal((await asE("select 1 from recipe_wants where recipe_id = $1", [id])).length, 0, "作ったら作りたいから外れる");
+  assert.equal((await asE("select note from recipe_cooks where recipe_id = $1 and user_id = $2", [id, idE]))[0].note, "おいしかった");
+  const cooked = (await notes(ids.C, "cook_cooked")).filter((p) => p.recipe_id === id);
+  assert.equal(cooked.length, 1, "作成者に通知（本人の作ったは通知しない）");
+  assert.equal(cooked[0].title, "唐揚げ");
+  // なりすまし・写真の直接書き込みはできない
+  await rejects(() => asE("insert into recipe_cooks (recipe_id, user_id) values ($1, $2)", [id, ids.C]), /row-level security/);
+  await rejects(() => asE("insert into recipe_cooks (recipe_id, photo_path) values ($1, 'x')", [id]), /permission denied/);
+  // 見えないレシピには付けられない
+  const [{ id: p }] = await as("A", "select save_recipe(null, $1::jsonb) id", [recipeJson({ visibility: "private" })]);
+  await rejects(() => asE("insert into recipe_cooks (recipe_id) values ($1)", [p]), /row-level security/);
+  // 削除は本人と管理者。数も戻る
+  const [{ id: cookId }] = await asE("select id from recipe_cooks where recipe_id = $1 and user_id = $2", [id, idE]);
+  assert.equal((await as("A", "delete from recipe_cooks where id = $1 returning id", [cookId])).length, 1);
+  assert.equal((await asSuper("select cooked_count from recipes where id = $1", [id]))[0].cooked_count, 0);
+});
+
+await test("レシピの反応: お気に入り・作りたいは本人だけ見える（数はレシピに出る）", async () => {
+  const [{ id }] = await as("C", "select save_recipe(null, $1::jsonb) id", [recipeJson({ title: "肉じゃが" })]);
+  await asE("insert into recipe_favorites (recipe_id) values ($1)", [id]);
+  await as("A", "insert into recipe_favorites (recipe_id) values ($1)", [id]);
+  await rejects(() => asE("insert into recipe_favorites (recipe_id) values ($1)", [id]), /duplicate key/);
+  assert.equal((await as("C", "select favorite_count from recipes where id = $1", [id]))[0].favorite_count, 2);
+  assert.equal((await as("C", "select user_id from recipe_favorites where recipe_id = $1", [id])).length, 0, "誰が付けたかは見えない");
+  assert.equal((await notes(ids.C, "cook_favorite")).filter((p) => p.recipe_id === id).length, 2);
+  await asE("delete from recipe_favorites where recipe_id = $1", [id]);
+  assert.equal((await as("C", "select favorite_count from recipes where id = $1", [id]))[0].favorite_count, 1);
+  await asE("insert into recipe_wants (recipe_id) values ($1)", [id]);
+  assert.equal((await as("A", "select 1 from recipe_wants where recipe_id = $1", [id])).length, 0);
+});
+
+await test("レシピの反応: コメント（作成者と先にコメントした人へ通知・削除は本人と管理者）", async () => {
+  const [{ id }] = await as("C", "select save_recipe(null, $1::jsonb) id", [recipeJson({ title: "豚汁" })]);
+  await asE("insert into recipe_comments (recipe_id, body) values ($1, '何人分ですか？')", [id]);
+  await as("C", "insert into recipe_comments (recipe_id, body) values ($1, '2人分です')", [id]);
+  assert.equal((await notes(ids.C, "cook_comment")).filter((p) => p.recipe_id === id).length, 1, "作成者へ");
+  const toE = (await notes(idE, "cook_comment")).filter((p) => p.recipe_id === id);
+  assert.equal(toE.length, 1, "先にコメントした人へ（返事）");
+  assert.equal(toE[0].excerpt, "2人分です");
+  await rejects(() => asE("insert into recipe_comments (recipe_id, body) values ($1, '   ')", [id]), /check constraint/);
+  const [{ id: c }] = await as("C", "select id from recipe_comments where recipe_id = $1 and user_id = $2", [id, ids.C]);
+  assert.equal((await asE("delete from recipe_comments where id = $1 returning id", [c])).length, 0, "他人のコメントは消せない");
+  assert.equal((await as("C", "delete from recipe_comments where id = $1 returning id", [c])).length, 1);
+  assert.equal((await as("D", "select id from recipe_comments where recipe_id = $1", [id])).length, 0, "グループ外は見えない");
+});
+
+await test("レシピの通知: 新しいグループ公開は仲間全員へ（初めて公開したときだけ・設定でオフ）", async () => {
+  await asSuper("update notification_settings set cook_new_recipe = false where user_id = $1", [ids.B]);
+  const [{ id }] = await as("C", "select save_recipe(null, $1::jsonb) id", [recipeJson({ title: "最初は自分だけ", visibility: "private" })]);
+  const count = async (user) => (await notes(user, "cook_new_recipe")).filter((p) => p.recipe_id === id).length;
+  assert.equal(await count(ids.A), 0, "自分だけのレシピは通知しない");
+  await as("C", "select save_recipe($1, $2::jsonb)", [id, recipeJson({ title: "公開", visibility: "group" })]);
+  await as("C", "select save_recipe($1, $2::jsonb)", [id, recipeJson({ title: "公開", visibility: "household" })]);
+  await as("C", "select save_recipe($1, $2::jsonb)", [id, recipeJson({ title: "公開", visibility: "group" })]);
+  assert.deepEqual([await count(ids.A), await count(idE), await count(ids.B), await count(ids.C), await count(ids.D)], [1, 1, 0, 0, 0]);
+});
+
+await test("CondoCook のランキング: グループ公開だけ・作成者本人の作ったは「作られたレシピ」に数えない", async () => {
+  const [{ id: g }] = await as("A", "select save_recipe(null, $1::jsonb) id", [recipeJson({ title: "ランキング用" })]);
+  const [{ id: h }] = await as("A", "select save_recipe(null, $1::jsonb) id", [recipeJson({ title: "家族だけ", visibility: "household" })]);
+  for (const who of ["C", "C", "A"]) await as(who, "insert into recipe_cooks (recipe_id) values ($1)", [g]);
+  await asE("insert into recipe_cooks (recipe_id) values ($1)", [g]);
+  await as("A", "insert into recipe_cooks (recipe_id) values ($1)", [h]);
+  const rows = await as("A", "select board, id, n from cook_monthly_ranking((now() at time zone 'Asia/Tokyo')::date)");
+  const get = (board, id) => rows.find((x) => x.board === board && x.id === id)?.n ?? 0;
+  assert.equal(get("recipe", g), 2, "作った人数（C と E。作成者の A は除く）");
+  assert.equal(get("recipe", h), 0, "家族だけのレシピは出ない");
+  assert.equal(get("cook", ids.A), 1, "自分のレシピを作った分は数える。家族だけのレシピは数えない");
+  assert.ok(get("post", ids.A) >= 1);
+  const last = await as("A", "select * from cook_monthly_ranking(((now() at time zone 'Asia/Tokyo') - interval '1 month')::date)");
+  assert.equal(last.filter((x) => x.id === g).length, 0, "先月には出ない");
+});
+
 console.log(`\n${passed} passed${process.exitCode ? ", some FAILED" : ""}`);

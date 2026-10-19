@@ -8,22 +8,22 @@ import {
 } from "@/app/actions/checkin";
 import { enablePush, hasDeviceSubscription, pushSupported } from "@/lib/client/push";
 
-type Settings = Record<NotificationSettingKey, boolean>;
+type SettingItem = { key: NotificationSettingKey; label: string; hint: string };
 
-const LABELS: { key: NotificationSettingKey; label: string; hint: string }[] = [
+const LABELS: SettingItem[] = [
   { key: "check_in", label: "チェックイン通知", hint: "誰かがFitにチェックインしたとき（プッシュ + アプリ内）" },
   { key: "location_stale", label: "位置確認停止通知", hint: "チェックイン中に15分以上位置を確認できないとき（プッシュ + アプリ内）" },
   { key: "schedule", label: "予定の通知", hint: "自分の予定への参加・キャンセル、参加中の予定の変更・削除（プッシュ + アプリ内）" },
   { key: "comment", label: "コメント通知", hint: "誰かが実績にコメントしたとき（プッシュ + アプリ内）" },
 ];
 
-export function SettingToggles({ initial }: { initial: Settings }) {
+export function SettingToggles({ initial, items = LABELS }: { initial: Partial<Record<NotificationSettingKey, boolean>>; items?: SettingItem[] }) {
   const [settings, setSettings] = useState(initial);
   const [, startTransition] = useTransition();
 
   return (
     <ul className="divide-y divide-border">
-      {LABELS.map(({ key, label, hint }) => (
+      {items.map(({ key, label, hint }) => (
         <li key={key} className="py-3">
           <label className="flex items-start justify-between gap-3">
             <span>
@@ -33,7 +33,7 @@ export function SettingToggles({ initial }: { initial: Settings }) {
             <input
               type="checkbox"
               className="mt-1 h-5 w-5 accent-[var(--accent)]"
-              checked={settings[key]}
+              checked={settings[key] ?? true}
               onChange={(e) => {
                 const value = e.target.checked;
                 setSettings((s) => ({ ...s, [key]: value }));
