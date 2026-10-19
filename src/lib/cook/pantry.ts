@@ -1,4 +1,5 @@
 // 食材リスト・レシピの提案（純粋関数。D11・D17）
+import { alternativeGroups } from "./alternatives.ts";
 import { normalizeFood } from "./ingredients.ts";
 
 /** 期限が近いとみなす日数（今日を含めてこの日数以内） */
@@ -31,7 +32,7 @@ export function expiryLabel(expiresOn: string | null, today: string): string | n
 }
 
 export type PantryLike = { ingredientId: string | null; name: string; expiresOn: string | null };
-export type SuggestIngredient = { ingredientId: string | null; name: string; optional: boolean };
+export type SuggestIngredient = { ingredientId: string | null; name: string; optional: boolean; orPrevious?: boolean };
 export type SuggestRecipe = {
   id: string;
   ingredients: SuggestIngredient[];
@@ -50,7 +51,8 @@ export type Suggestion<R> = {
 
 /**
  * レシピの提案の並び（D17）: ①買う物が少ない順 ②同じなら期限が近い食材を使う順 ③お気に入り・作られた数。
- * 最近家族が作ったものは下げる。家にある食材を1つも使わないレシピは出さない
+ * 最近家族が作ったものは下げる。家にある食材を1つも使わないレシピは出さない。
+ * 「または」の材料は、どれか1つが家にある・いつもあるなら買わなくてよい（買う物は「キャベツかカット野菜」）
  */
 export function suggestRecipes<R extends SuggestRecipe>(
   recipes: R[],
@@ -65,14 +67,15 @@ export function suggestRecipes<R extends SuggestRecipe>(
   const scored = recipes.flatMap((recipe) => {
     const toBuy: string[] = [];
     const used: PantryLike[] = [];
-    for (const ing of recipe.ingredients) {
-      const have = findPantry(ing);
+    for (const group of alternativeGroups(recipe.ingredients)) {
+      const have = group.map(findPantry).find(Boolean);
       if (have) {
         if (!used.includes(have)) used.push(have);
         continue;
       }
-      if (ing.optional || (ing.ingredientId && staple.has(ing.ingredientId))) continue;
-      if (!toBuy.includes(ing.name)) toBuy.push(ing.name);
+      if (group.every((i) => i.optional) || group.some((i) => i.ingredientId && staple.has(i.ingredientId))) continue;
+      const name = group.map((i) => i.name).join("か");
+      if (!toBuy.includes(name)) toBuy.push(name);
     }
     if (used.length === 0) return [];
     const expiringItems = used

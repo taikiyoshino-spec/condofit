@@ -53,3 +53,17 @@ test("usedPantryItems: 使った家にある食材（いつもあるものは除
   const used = usedPantryItems([ing("鶏もも肉", "chicken"), ing("しょうゆ", "soy"), ing("長ねぎ", null), ing("卵", "egg")], pantry, ["soy"]);
   assert.deepEqual(used.map((p) => p.name), ["鶏もも肉", "長ねぎ"]);
 });
+
+test("suggestRecipes: 「または」はどれか1つあればよい", () => {
+  const pantry = [{ ingredientId: "cut", name: "カット野菜", expiresOn: null }, { ingredientId: "pork", name: "豚肉", expiresOn: null }];
+  const alt = (name: string, id: string) => ({ ...ing(name, id), orPrevious: true });
+  const s = suggestRecipes(
+    [
+      recipe("a", [ing("豚肉", "pork"), ing("キャベツ", "cabbage"), alt("カット野菜", "cut")]),
+      recipe("b", [ing("豚肉", "pork"), ing("キャベツ", "cabbage"), alt("白菜", "hakusai"), ing("しょうゆ", "soy"), alt("めんつゆ", "tsuyu")]),
+    ],
+    { pantry, staples: ["soy"], recentIds: [], today },
+  );
+  assert.deepEqual(s.find((x) => x.recipe.id === "a")!.toBuy, [], "カット野菜があるのでキャベツは買わない");
+  assert.deepEqual(s.find((x) => x.recipe.id === "b")!.toBuy, ["キャベツか白菜"], "どちらもなければ「AかB」。しょうゆ（いつもある）があればめんつゆは不要");
+});

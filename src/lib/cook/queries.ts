@@ -38,6 +38,8 @@ export type RecipeIngredient = {
   amount: string;
   optional: boolean;
   section: string | null;
+  /** 直前の材料の代わり（「キャベツ または カット野菜」） */
+  orPrevious: boolean;
 };
 
 export type RecipeDetail = Omit<RecipeSummary, "ingredientNames" | "ingredients"> & {
@@ -97,14 +99,21 @@ export async function listRecipes(): Promise<RecipeSummary[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("recipes")
-    .select(`${SUMMARY}, recipe_ingredients(name, ingredient_id, optional)`)
+    .select(`${SUMMARY}, recipe_ingredients(name, ingredient_id, optional, or_previous, position)`)
     .is("deleted_at", null)
     .order("created_at", { ascending: false })
     .limit(500);
   if (error) throw error;
-  type Row = SummaryRow & { recipe_ingredients: { name: string; ingredient_id: string | null; optional: boolean }[] };
+  type Row = SummaryRow & {
+    recipe_ingredients: { name: string; ingredient_id: string | null; optional: boolean; or_previous: boolean; position: number }[];
+  };
   return (data as unknown as Row[]).map((r) =>
-    toSummary(r, r.recipe_ingredients.map((i) => ({ name: i.name, ingredientId: i.ingredient_id, optional: i.optional }))),
+    toSummary(
+      r,
+      [...r.recipe_ingredients]
+        .sort((a, b) => a.position - b.position)
+        .map((i) => ({ name: i.name, ingredientId: i.ingredient_id, optional: i.optional, orPrevious: i.or_previous })),
+    ),
   );
 }
 
@@ -114,7 +123,7 @@ export const getRecipe = cache(async (id: string): Promise<RecipeDetail | null> 
     .from("recipes")
     .select(
       `${SUMMARY}, memo, source_url, source_name, photo_path, copied_from,
-       recipe_ingredients(ingredient_id, name, amount, optional, section, position),
+       recipe_ingredients(ingredient_id, name, amount, optional, section, or_previous, position),
        recipe_steps(body, position)`,
     )
     .eq("id", id)
@@ -127,7 +136,15 @@ export const getRecipe = cache(async (id: string): Promise<RecipeDetail | null> 
     source_name: string | null;
     photo_path: string | null;
     copied_from: string | null;
-    recipe_ingredients: { ingredient_id: string | null; name: string; amount: string; optional: boolean; section: string | null; position: number }[];
+    recipe_ingredients: {
+      ingredient_id: string | null;
+      name: string;
+      amount: string;
+      optional: boolean;
+      section: string | null;
+      or_previous: boolean;
+      position: number;
+    }[];
     recipe_steps: { body: string; position: number }[];
   };
   // コピー元は見える場合だけ表示（見えなければ RLS で取れない）
@@ -145,7 +162,14 @@ export const getRecipe = cache(async (id: string): Promise<RecipeDetail | null> 
     copiedFrom,
     ingredients: [...r.recipe_ingredients]
       .sort((a, b) => a.position - b.position)
-      .map((i) => ({ ingredientId: i.ingredient_id, name: i.name, amount: i.amount, optional: i.optional, section: i.section })),
+      .map((i) => ({
+        ingredientId: i.ingredient_id,
+        name: i.name,
+        amount: i.amount,
+        optional: i.optional,
+        section: i.section,
+        orPrevious: i.or_previous,
+      })),
     steps: [...r.recipe_steps].sort((a, b) => a.position - b.position).map((s) => s.body),
   };
 });

@@ -21,7 +21,7 @@ export type RecipeInput = {
   sourceUrl: string;
   sourceName: string;
   copiedFrom: string | null;
-  ingredients: { ingredientId: string | null; name: string; amount: string; optional: boolean; section: string }[];
+  ingredients: { ingredientId: string | null; name: string; amount: string; optional: boolean; section: string; orPrevious?: boolean }[];
   steps: string[];
 };
 export type RecipeResult = { ok: true; id: string } | { ok: false; error: string };
@@ -80,6 +80,7 @@ function toPayload(input: RecipeInput): { error: string } | { payload: Record<st
           quantity: parsed?.quantity ?? null,
           unit: parsed?.unit || null,
           optional: Boolean(i.optional),
+          or_previous: Boolean(i.orPrevious),
           section: String(i.section ?? "").trim().slice(0, 20),
         };
       }),

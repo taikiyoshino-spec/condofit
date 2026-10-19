@@ -6,6 +6,7 @@ import { addShoppingItemsAction } from "@/app/actions/cook-shopping";
 import { BottomSheet } from "@/components/bottom-sheet";
 import { showToast } from "@/components/toaster";
 import { scaleAmount } from "@/lib/cook/amount";
+import { alternativeGroups } from "@/lib/cook/alternatives";
 import type { RecipeIngredient } from "@/lib/cook/queries";
 
 export type ShoppingHints = { inPantry: string[]; staples: string[]; inList: string[] };
@@ -73,8 +74,9 @@ export function IngredientList({
           {g.section && <h3 className="mb-1 text-sm font-semibold text-accent">{g.section}</h3>}
           <ul className="divide-y divide-border">
             {g.items.map((ing, i) => (
-              <li key={i} className="flex items-baseline justify-between gap-3 py-2">
+              <li key={i} className={`flex items-baseline justify-between gap-3 py-2 ${ing.orPrevious ? "pl-4" : ""}`}>
                 <span>
+                  {ing.orPrevious && <span className="mr-1.5 text-xs font-semibold text-accent">または</span>}
                   {ing.name}
                   {ing.optional && <span className="ml-1 text-xs text-muted">（なくても可）</span>}
                 </span>
@@ -126,7 +128,12 @@ function ShoppingPicker({
     if (hints.staples.includes(ing.ingredientId)) return "いつもある";
     return null;
   };
-  const [selected, setSelected] = useState(() => new Set(ingredients.flatMap((ing, i) => (note(ing) || ing.optional ? [] : [i]))));
+  // 「または」のまとまりは1つだけ選ぶ。どれかが家にある・いつもある・リストにある、または全部なくても可なら選ばない
+  const groups = alternativeGroups(ingredients.map((ing, index) => ({ ...ing, index })));
+  const groupOf = (i: number) => groups.find((g) => g.some((x) => x.index === i)) ?? [];
+  const [selected, setSelected] = useState(
+    () => new Set(groups.flatMap((g) => (g.some((x) => note(x)) || g.every((x) => x.optional) ? [] : [g[0].index]))),
+  );
 
   const add = () =>
     startTransition(async () => {
@@ -153,14 +160,17 @@ function ShoppingPicker({
                   onChange={(e) =>
                     setSelected((s) => {
                       const next = new Set(s);
-                      if (e.target.checked) next.add(i);
-                      else next.delete(i);
+                      if (e.target.checked) {
+                        for (const x of groupOf(i)) next.delete(x.index);
+                        next.add(i);
+                      } else next.delete(i);
                       return next;
                     })
                   }
                   className="h-5 w-5 shrink-0 accent-[var(--accent)]"
                 />
                 <span className="min-w-0 flex-1">
+                  {ing.orPrevious && <span className="mr-1.5 text-xs font-semibold text-accent">または</span>}
                   {ing.name}
                   {n && <span className="ml-2 text-xs text-muted">{n}</span>}
                   {ing.optional && <span className="ml-2 text-xs text-muted">なくても可</span>}

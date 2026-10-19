@@ -1025,4 +1025,23 @@ await test("家族の管理: 管理者がメンバーを移し、空になった
   await rejects(() => asE("select admin_rename_household($1, 'x')", [hNew]), /forbidden/);
 });
 
+await test("レシピの材料: 「または」（直前の材料の代わり）", async () => {
+  const [{ id }] = await asE("select save_recipe(null, $1::jsonb) id", [
+    recipeJson({
+      ingredients: [
+        { name: "キャベツ", amount: "1/2玉", or_previous: true },
+        { name: "カット野菜", amount: "1袋", or_previous: true },
+        { name: "しょうゆ", amount: "大さじ1", section: "タレ", or_previous: true },
+        { name: "めんつゆ", amount: "大さじ1", section: "タレ", or_previous: true },
+      ],
+    }),
+  ]);
+  const rows = await asE("select name, or_previous from recipe_ingredients where recipe_id = $1 order by position", [id]);
+  assert.deepEqual(
+    rows.map((r) => [r.name, r.or_previous]),
+    [["キャベツ", false], ["カット野菜", true], ["しょうゆ", false], ["めんつゆ", true]],
+    "最初の材料とまとまりの最初の材料は「または」にしない",
+  );
+});
+
 console.log(`\n${passed} passed${process.exitCode ? ", some FAILED" : ""}`);

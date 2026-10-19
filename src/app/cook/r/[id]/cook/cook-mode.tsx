@@ -240,6 +240,7 @@ export function CookMode({
                       />
                       <span className={`flex-1 ${checked.has(i) ? "text-muted line-through" : ""}`}>
                         {ing.section && <span className="mr-1 text-sm text-accent">[{ing.section}]</span>}
+                        {ing.orPrevious && <span className="mr-1 text-sm font-semibold text-accent">または</span>}
                         {ing.name}
                       </span>
                       <span className="font-semibold">{scaleAmount(ing.amount, factor)}</span>

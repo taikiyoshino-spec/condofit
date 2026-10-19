@@ -150,6 +150,8 @@ export function RecipeEditor({
   useEffect(() => () => void (photo && URL.revokeObjectURL(photo.preview)), [photo]);
 
   const set = <K extends keyof Form>(key: K, value: Form[K]) => setForm((f) => ({ ...f, [key]: value }));
+  // 「または」にできるのは、すぐ上が材料の行のとき（見出しの直後・最初の行はできない）
+  const canAlt = (i: number) => i > 0 && form.rows[i - 1].kind === "item";
   const setRow = (key: number, patch: Partial<EditorItem> | { name: string }) =>
     setForm((f) => ({ ...f, rows: f.rows.map((r) => (r.key === key ? ({ ...r, ...patch } as EditorRow) : r)) }));
   const moveIn = <T,>(list: T[], i: number, d: number) => {
@@ -353,7 +355,8 @@ export function RecipeEditor({
                 <RowButtons onUp={() => set("rows", moveIn(form.rows, i, -1))} onDown={() => set("rows", moveIn(form.rows, i, 1))} onDelete={() => set("rows", form.rows.filter((x) => x.key !== r.key))} />
               </li>
             ) : (
-              <li key={r.key} className="rounded-lg border border-border p-2">
+              <li key={r.key} className={`rounded-lg border border-border p-2 ${canAlt(i) && r.orPrevious ? "-mt-1 ml-6" : ""}`}>
+                {canAlt(i) && r.orPrevious && <p className="mb-1 text-xs font-semibold text-accent">または（上の材料の代わり）</p>}
                 <div className="flex items-center gap-1">
                   <div className="relative min-w-0 flex-[3]">
                     <input
@@ -412,10 +415,18 @@ export function RecipeEditor({
                   </ul>
                 )}
                 <div className="mt-1 flex items-center justify-between">
-                  <label className="flex items-center gap-1.5 text-xs text-muted">
-                    <input type="checkbox" checked={r.optional} onChange={(e) => setRow(r.key, { optional: e.target.checked })} />
-                    なくても可
-                  </label>
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <label className="flex items-center gap-1.5 text-xs text-muted">
+                      <input type="checkbox" checked={r.optional} onChange={(e) => setRow(r.key, { optional: e.target.checked })} />
+                      なくても可
+                    </label>
+                    {canAlt(i) && (
+                      <label className="flex items-center gap-1.5 text-xs text-muted">
+                        <input type="checkbox" checked={Boolean(r.orPrevious)} onChange={(e) => setRow(r.key, { orPrevious: e.target.checked })} />
+                        上の材料の代わり（または）
+                      </label>
+                    )}
+                  </div>
                   <RowButtons onUp={() => set("rows", moveIn(form.rows, i, -1))} onDown={() => set("rows", moveIn(form.rows, i, 1))} onDelete={() => set("rows", form.rows.filter((x) => x.key !== r.key))} />
                 </div>
               </li>
