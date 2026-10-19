@@ -15,5 +15,6 @@ export function GET() {
     },
     pushConfigured: Boolean(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY),
     cronConfigured: Boolean(process.env.CRON_SECRET),
+    aiConfigured: Boolean(process.env.GEMINI_API_KEY),
   });
 }
