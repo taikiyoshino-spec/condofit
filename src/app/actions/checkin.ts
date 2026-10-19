@@ -54,7 +54,7 @@ export async function removePushSubscriptionAction(endpoint: string) {
   return { ok: !error };
 }
 
-const SETTING_KEYS = ["check_in", "location_stale", "schedule", "comment", "cook_cooked", "cook_reaction", "cook_new_recipe"] as const;
+const SETTING_KEYS = ["check_in", "location_stale", "schedule", "comment", "cook_cooked", "cook_reaction", "cook_new_recipe", "cook_shopping"] as const;
 export type NotificationSettingKey = (typeof SETTING_KEYS)[number];
 
 export async function updateNotificationSettingAction(key: NotificationSettingKey, value: boolean) {

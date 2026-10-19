@@ -13,6 +13,7 @@ const NOTIFY_ITEMS = [
   { key: "cook_cooked", label: "作った", hint: "自分のレシピを誰かが作ったとき" },
   { key: "cook_reaction", label: "コメント・お気に入り", hint: "自分のレシピへのコメント・お気に入り、コメントへの返事" },
   { key: "cook_new_recipe", label: "新しいレシピ", hint: "仲間が新しいレシピをグループに公開したとき" },
+  { key: "cook_shopping", label: "買い物リスト", hint: "家族が買い物リストに追加したとき（続けて追加したときは5分後にまとめて1回）" },
 ] as const;
 
 /** CondoCook のマイページ（自分のレシピの数、名前・アイコン・PIN。CondoCook だけの家族もここで変更できる） */
@@ -23,7 +24,7 @@ export default async function CookMyPage() {
     listMemberProfiles(),
     listRecipes(),
     myRecipeMarks(),
-    supabase.from("notification_settings").select("cook_cooked, cook_reaction, cook_new_recipe").eq("user_id", member.id).maybeSingle(),
+    supabase.from("notification_settings").select("cook_cooked, cook_reaction, cook_new_recipe, cook_shopping").eq("user_id", member.id).maybeSingle(),
   ]);
   const me = profiles.find((p) => p.id === member.id);
   const visible = new Set(recipes.map((r) => r.id));

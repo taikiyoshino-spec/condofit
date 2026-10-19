@@ -886,4 +886,71 @@ await test("CondoCook のランキング: グループ公開だけ・作成者�
   assert.equal(last.filter((x) => x.id === g).length, 0, "先月には出ない");
 });
 
+await test("買い物リスト: 家族で共有・レシピから追加・同じ材料は重ねない", async () => {
+  // ここでは C と E が同じ家族（前のテストで移した）。A は別の家族
+  await as("A", "select ensure_my_household()");
+  const [{ id: recipe }] = await as("A", "select save_recipe(null, $1::jsonb) id", [recipeJson({ title: "買い物用" })]);
+  const [{ id: chicken }] = await asSuper("select id from ingredients where name = '鶏もも肉'");
+  const items = JSON.stringify([
+    { ingredient_id: chicken, name: "", amount: "300g", recipe_id: recipe },
+    { name: "  キッチンペーパー ", amount: "" },
+    { name: "   " },
+  ]);
+  assert.equal((await asE("select add_shopping_items($1::jsonb) n", [items]))[0].n, 2, "空の名前は除く");
+  assert.equal((await asE("select add_shopping_items($1::jsonb) n", [items]))[0].n, 1, "同じレシピの同じ材料はまだ買っていなければ足さない（手入力は足す）");
+  const rows = await as("C", "select name, category, recipe_title, amount from shopping_items order by created_at, name");
+  assert.equal(rows.length, 3, "家族（C）にも見える");
+  assert.deepEqual(rows.find((r) => r.recipe_title), { name: "鶏もも肉", category: "肉", recipe_title: "買い物用", amount: "300g" }, "分類とレシピ名はDBが入れる");
+  assert.equal((await as("A", "select id from shopping_items")).length, 0, "別の家族には見えない");
+  await rejects(() => as("D", "select add_shopping_items('[]'::jsonb)"), /forbidden/);
+  await rejects(() => asE("insert into shopping_items (household_id, name, added_by) select household_id, 'x', $1 from household_members where user_id = $1", [idE]), /permission denied/);
+  // 見えないレシピのレシピ名は入れない
+  const [{ id: secret }] = await as("A", "select save_recipe(null, $1::jsonb) id", [recipeJson({ title: "ひみつ", visibility: "private" })]);
+  await asE("select add_shopping_items($1::jsonb)", [JSON.stringify([{ name: "卵", recipe_id: secret }])]);
+  assert.equal((await asE("select recipe_id, recipe_title from shopping_items where name = '卵'"))[0].recipe_title, null);
+  // 別の家族のものは消せない・買ったにできない
+  const [{ id: one }] = await asE("select id from shopping_items where name = '卵'");
+  assert.equal((await as("A", "delete from shopping_items where id = $1 returning id", [one])).length, 0);
+  await as("A", "select set_shopping_bought($1, true)", [[one]]);
+  assert.equal((await asE("select bought_at from shopping_items where id = $1", [one]))[0].bought_at, null);
+  assert.equal((await as("C", "delete from shopping_items where id = $1 returning id", [one])).length, 1, "家族は消せる");
+});
+
+await test("買い物リスト: 買ったものを食材リストへ（期限の目安・同じ食材は1行）", async () => {
+  const [{ id: chicken, fridge_days }] = await asSuper("select id, fridge_days from ingredients where name = '鶏もも肉'");
+  const ids2 = (await asE("select id from shopping_items")).map((r) => r.id);
+  await asE("select set_shopping_bought($1, true)", [ids2]);
+  await asE("select set_shopping_bought($1, false)", [[ids2[0]]]);
+  await asE("select set_shopping_bought($1, true)", [[ids2[0]]]);
+  const [{ n }] = await as("C", "select move_bought_to_pantry() n");
+  assert.equal(n, 2, "鶏もも肉が2行あっても食材リストは1行");
+  assert.equal((await asE("select id from shopping_items")).length, 0, "リストから消える");
+  const pantry = await asE("select ingredient_id, name, category, expires_on - bought_on as days from pantry_items order by name");
+  assert.deepEqual(pantry.map((p) => p.name).sort(), ["キッチンペーパー", "鶏もも肉"]);
+  assert.equal(pantry.find((p) => p.ingredient_id === chicken).days, fridge_days, "期限の目安は買った日＋冷蔵の日数");
+  // もう一度買っても1行のまま
+  await asE("select add_shopping_items($1::jsonb)", [JSON.stringify([{ ingredient_id: chicken, name: "鶏もも肉" }])]);
+  await asE("select set_shopping_bought(array(select id from shopping_items), true)");
+  await asE("select move_bought_to_pantry()");
+  assert.equal((await asE("select id from pantry_items where ingredient_id = $1", [chicken])).length, 1);
+  assert.equal((await as("A", "select id from pantry_items")).length, 0, "別の家族には見えない");
+  await rejects(() => asE("insert into pantry_items (household_id, name) select household_id, 'x' from household_members where user_id = $1", [idE]), /permission denied/);
+});
+
+await test("買い物リストの通知: 追加が続く間はまとめ、5分たったら家族へ1回", async () => {
+  await asSuper("delete from notifications where type = 'cook_shopping'");
+  await asSuper("update shopping_items set notified = true");
+  await asE("select add_shopping_items($1::jsonb)", [JSON.stringify([{ name: "牛乳" }, { name: "パン" }, { name: "バナナ" }, { name: "ヨーグルト" }])]);
+  assert.equal((await asService("select * from flush_shopping_notifications()")).length, 0, "5分たっていなければまだ");
+  await rejects(() => asE("select * from flush_shopping_notifications()"), /permission denied/);
+  await asSuper("update shopping_items set created_at = now() - interval '6 minutes' where not notified");
+  const sent = await asService("select * from flush_shopping_notifications()");
+  assert.deepEqual(sent.map((s) => s.recipient_user_id), [ids.C], "同じ家族の、追加した人以外へ");
+  assert.equal(sent[0].payload.count, 4);
+  assert.deepEqual(sent[0].payload.names, ["牛乳", "パン", "バナナ"]);
+  assert.equal((await asService("select * from flush_shopping_notifications()")).length, 0, "1回だけ");
+  assert.equal((await notes(ids.C, "cook_shopping")).length, 1);
+  assert.equal((await notes(idE, "cook_shopping")).length, 0, "本人には送らない");
+});
+
 console.log(`\n${passed} passed${process.exitCode ? ", some FAILED" : ""}`);

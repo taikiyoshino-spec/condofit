@@ -64,3 +64,10 @@ test("CondoCook の通知はレシピへ", () => {
   assert.equal(formatNotification(n("cook_cooked", { recipe_id: sid, title: "親子丼", excerpt: "" })).sub, undefined, "一言なし");
   assert.equal(formatNotification(n("cook_new_recipe", {})).href, "/cook");
 });
+
+test("買い物リストの通知はまとめて1回", () => {
+  const f = formatNotification(n("cook_shopping", { count: 4, names: ["牛乳", "パン", "卵"] }, "B"));
+  assert.equal(f.text, "Bさんが買い物リストに4品追加しました");
+  assert.equal(f.sub, "牛乳、パン、卵 など");
+  assert.equal(f.href, "/cook/shopping");
+});

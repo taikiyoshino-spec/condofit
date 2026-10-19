@@ -1,6 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
+import type { ShoppingItem } from "./shopping";
 
 // CondoCook の読み取り。見える範囲（グループ／家族だけ／自分だけ）は RLS で絞られている
 
@@ -264,4 +265,37 @@ export async function getCookRanking(month: string): Promise<CookRanking> {
   for (const r of (data ?? []) as { board: keyof CookRanking; id: string; n: number }[]) out[r.board]?.push({ id: r.id, n: r.n });
   for (const k of Object.keys(out) as (keyof CookRanking)[]) out[k].sort((a, b) => b.n - a.n);
   return out;
+}
+
+// ---- 買い物リスト・食材リスト（自分の家族の分。RLS で絞られる） ----
+
+export async function listShoppingItems(): Promise<ShoppingItem[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("shopping_items")
+    .select("id, ingredient_id, name, category, amount, recipe_title, bought_at")
+    .order("created_at");
+  if (error) throw error;
+  return data.map((s) => ({
+    id: s.id as string,
+    ingredientId: (s.ingredient_id as string | null) ?? null,
+    name: s.name as string,
+    category: s.category as string,
+    amount: s.amount as string,
+    recipeTitle: (s.recipe_title as string | null) ?? null,
+    bought: Boolean(s.bought_at),
+  }));
+}
+
+/** レシピから買い物リストに入れるときに、最初からチェックを外しておく食材（家にある・いつもある・もうリストにある） */
+export async function shoppingHints(): Promise<{ inPantry: string[]; staples: string[]; inList: string[] }> {
+  const supabase = await createClient();
+  const [pantry, staples, list] = await Promise.all([
+    supabase.from("pantry_items").select("ingredient_id").not("ingredient_id", "is", null),
+    supabase.from("ingredients").select("id").eq("is_staple", true),
+    supabase.from("shopping_items").select("ingredient_id").is("bought_at", null).not("ingredient_id", "is", null),
+  ]);
+  const ids = (rows: { ingredient_id?: unknown; id?: unknown }[] | null, col: "ingredient_id" | "id") =>
+    [...new Set((rows ?? []).map((r) => r[col] as string))];
+  return { inPantry: ids(pantry.data, "ingredient_id"), staples: ids(staples.data, "id"), inList: ids(list.data, "ingredient_id") };
 }

@@ -34,3 +34,30 @@ export async function pushCookNotifications(actorId: string, actorName: string, 
     { title: f.text, body: f.sub ?? "", url: f.href, tag: `${type}-${recipeId}` },
   );
 }
+
+/**
+ * 買い物リストの通知（D23④）。最後の追加から5分たったまとまりの通知を DB で作り、同じ相手にプッシュを送る。
+ * 毎分の定期処理から呼ぶ。送ったまとまりの数を返す
+ */
+export async function flushShoppingNotifications(): Promise<number> {
+  const admin = createAdminClient();
+  const { data, error } = await admin.rpc("flush_shopping_notifications");
+  if (error || !data?.length) return 0;
+  const rows = data as { recipient_user_id: string; actor_user_id: string; payload: Record<string, unknown> }[];
+  const { data: actors } = await admin.from("users").select("id, display_name").in("id", [...new Set(rows.map((r) => r.actor_user_id))]);
+  const names = new Map((actors ?? []).map((u) => [u.id as string, u.display_name as string]));
+
+  // 同じ人の同じまとまりごとに送る
+  const batches = new Map<string, { actorId: string; payload: Record<string, unknown>; recipients: string[] }>();
+  for (const r of rows) {
+    const key = `${r.actor_user_id}:${JSON.stringify(r.payload)}`;
+    const b = batches.get(key) ?? { actorId: r.actor_user_id, payload: r.payload, recipients: [] };
+    b.recipients.push(r.recipient_user_id);
+    batches.set(key, b);
+  }
+  for (const b of batches.values()) {
+    const f = formatNotification({ id: "", type: "cook_shopping", actorName: names.get(b.actorId) ?? null, payload: b.payload, createdAt: "", readAt: null });
+    await sendPush(b.recipients, "cook_shopping", { title: f.text, body: f.sub ?? "", url: f.href, tag: "cook-shopping" });
+  }
+  return batches.size;
+}

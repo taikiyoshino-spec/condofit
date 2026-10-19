@@ -62,6 +62,15 @@ export function formatNotification(n: NotificationRow): { text: string; sub?: st
       return { text: `${who}が「${title(p)}」をお気に入りにしました`, href: recipeHref(p) };
     case "cook_new_recipe":
       return { text: `${who}が新しいレシピ「${title(p)}」を登録しました`, href: recipeHref(p) };
+    case "cook_shopping": {
+      const names = Array.isArray(p.names) ? (p.names as unknown[]).filter((x): x is string => typeof x === "string") : [];
+      const count = typeof p.count === "number" ? p.count : names.length;
+      return {
+        text: `${who}が買い物リストに${count}品追加しました`,
+        sub: names.length ? `${names.join("、")}${count > names.length ? " など" : ""}` : undefined,
+        href: "/cook/shopping",
+      };
+    }
     default:
       return { text: "お知らせがあります", href: "/" };
   }

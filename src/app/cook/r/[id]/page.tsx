@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireCookUser } from "@/lib/auth/session";
-import { getRecipe, getRecipeReactions, listCategories, myHouseholdSize } from "@/lib/cook/queries";
+import { getRecipe, getRecipeReactions, listCategories, myHouseholdSize, shoppingHints } from "@/lib/cook/queries";
 import { PageHeader } from "@/components/page";
 import { recipePhotoUrl } from "@/lib/cook/photo";
 import { Owner } from "../../owner";
@@ -16,11 +16,12 @@ export default async function RecipePage({ params, searchParams }: PageProps<"/c
   const { id } = await params;
   if (!UUID_RE.test(id)) notFound();
   const member = await requireCookUser();
-  const [recipe, categories, householdSize, reactions] = await Promise.all([
+  const [recipe, categories, householdSize, reactions, hints] = await Promise.all([
     getRecipe(id),
     listCategories(),
     myHouseholdSize(),
     getRecipeReactions(id, member.id),
+    shoppingHints(),
   ]);
   if (!recipe) notFound();
   const isAdmin = member.role === "admin" && member.apps === "all";
@@ -88,7 +89,7 @@ export default async function RecipePage({ params, searchParams }: PageProps<"/c
         openCooked={openCooked}
       />
 
-      <IngredientList recipeId={recipe.id} ingredients={recipe.ingredients} servings={recipe.servings} initialServings={recipe.servings ? householdSize : null} />
+      <IngredientList recipeId={recipe.id} ingredients={recipe.ingredients} servings={recipe.servings} initialServings={recipe.servings ? householdSize : null} hints={hints} />
 
       <section className="mx-4 mb-4">
         <h2 className="mb-2 text-lg font-semibold">作り方</h2>
