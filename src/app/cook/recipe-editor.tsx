@@ -8,7 +8,17 @@ import { addIngredientAction, type ImportDraft } from "@/app/actions/cook-import
 import { BottomSheet } from "@/components/bottom-sheet";
 import { showToast } from "@/components/toaster";
 import { resizeToJpeg } from "@/lib/client/resize-image";
-import { ingredientsToRows, parseTags, rowsToIngredients, type EditorItem, type EditorRow } from "@/lib/cook/editor";
+import {
+  appendLooseItem,
+  editorBlocks,
+  ingredientsToRows,
+  insertAfter,
+  parseTags,
+  removeSection,
+  rowsToIngredients,
+  type EditorItem,
+  type EditorRow,
+} from "@/lib/cook/editor";
 import { INGREDIENT_CATEGORIES, cleanIngredientName, matchIngredient, searchIngredients, type IngredientCategory } from "@/lib/cook/ingredients";
 import { PHOTO_FULL_SIDE, PHOTO_THUMB_SIDE, recipePhotoUrl } from "@/lib/cook/photo";
 import type { Category, IngredientOption, RecipeDetail } from "@/lib/cook/queries";
@@ -152,6 +162,84 @@ export function RecipeEditor({
   const set = <K extends keyof Form>(key: K, value: Form[K]) => setForm((f) => ({ ...f, [key]: value }));
   // 「または」にできるのは、すぐ上が材料の行のとき（見出しの直後・最初の行はできない）
   const canAlt = (i: number) => i > 0 && form.rows[i - 1].kind === "item";
+  // 材料の1行（r は行、i は form.rows の位置）
+  const itemRow = (r: EditorItem, i: number) => (
+    <li key={r.key} className={`rounded-lg border border-border p-2 ${canAlt(i) && r.orPrevious ? "-mt-1 ml-6" : ""}`}>
+      {canAlt(i) && r.orPrevious && <p className="mb-1 text-xs font-semibold text-accent">または（上の材料の代わり）</p>}
+      <div className="flex items-center gap-1">
+        <div className="relative min-w-0 flex-[3]">
+          <input
+            value={r.name}
+            onChange={(e) => setRow(r.key, { name: e.target.value, ingredientId: null })}
+            onFocus={() => setFocusedRow(r.key)}
+            onBlur={() => setTimeout(() => setFocusedRow((k) => (k === r.key ? null : k)), 150)}
+            maxLength={60}
+            placeholder="材料（例：とりもも）"
+            aria-label="材料名"
+            className="w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-base"
+          />
+          {r.ingredientId && <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-accent" title="食材とつながっています">✓</span>}
+        </div>
+        <input
+          value={r.amount}
+          onChange={(e) => setRow(r.key, { amount: e.target.value })}
+          maxLength={30}
+          placeholder="分量"
+          aria-label="分量"
+          className="min-w-0 flex-[2] rounded-lg border border-border bg-surface px-2 py-1.5 text-base"
+        />
+      </div>
+      {focusedRow === r.key && r.name.trim() && !r.ingredientId && (
+        <ul className="mt-1 flex flex-wrap gap-1" aria-label="食材の候補">
+          {suggestions.map((s) => (
+            <li key={s.id}>
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  setRow(r.key, { name: s.name, ingredientId: s.id });
+                  setFocusedRow(null);
+                }}
+                className="rounded-full border border-accent px-2.5 py-1 text-xs text-accent"
+              >
+                {s.name}
+              </button>
+            </li>
+          ))}
+          {!matchIngredient(r.name, ingredients) && (
+            <li>
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => {
+                  setAdding({ rowKey: r.key, name: cleanIngredientName(r.name) || r.name.trim(), reading: "", category: "その他" });
+                  setFocusedRow(null);
+                }}
+                className="rounded-full border border-dashed border-border px-2.5 py-1 text-xs text-muted"
+              >
+                ＋ 食材の一覧に追加
+              </button>
+            </li>
+          )}
+        </ul>
+      )}
+      <div className="mt-1 flex items-center justify-between">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <label className="flex items-center gap-1.5 text-xs text-muted">
+            <input type="checkbox" checked={r.optional} onChange={(e) => setRow(r.key, { optional: e.target.checked })} />
+            なくても可
+          </label>
+          {canAlt(i) && (
+            <label className="flex items-center gap-1.5 text-xs text-muted">
+              <input type="checkbox" checked={Boolean(r.orPrevious)} onChange={(e) => setRow(r.key, { orPrevious: e.target.checked })} />
+              上の材料の代わり（または）
+            </label>
+          )}
+        </div>
+        <RowButtons onUp={() => set("rows", moveIn(form.rows, i, -1))} onDown={() => set("rows", moveIn(form.rows, i, 1))} onDelete={() => set("rows", form.rows.filter((x) => x.key !== r.key))} />
+      </div>
+    </li>
+  );
   const setRow = (key: number, patch: Partial<EditorItem> | { name: string }) =>
     setForm((f) => ({ ...f, rows: f.rows.map((r) => (r.key === key ? ({ ...r, ...patch } as EditorRow) : r)) }));
   const moveIn = <T,>(list: T[], i: number, d: number) => {
@@ -340,107 +428,57 @@ export function RecipeEditor({
       <section className="mx-4 rounded-xl border border-border bg-surface p-4">
         <h2 className="mb-1 font-semibold">材料</h2>
         <p className="mb-2 text-xs text-muted">分量は「200g」「大さじ2」「少々」のように。何人分を入れると、見る人の人数に合わせて換算されます。</p>
-        <ul className="space-y-2">
-          {form.rows.map((r, i) =>
-            r.kind === "heading" ? (
-              <li key={r.key} className="flex items-center gap-1">
-                <input
-                  value={r.name}
-                  onChange={(e) => setRow(r.key, { name: e.target.value })}
-                  maxLength={20}
-                  placeholder="見出し（例：タレ）。空欄でまとまりを終える"
-                  aria-label="材料の見出し"
-                  className="min-w-0 flex-1 rounded-lg border border-accent bg-surface px-3 py-1.5 text-sm font-semibold text-accent"
-                />
-                <RowButtons onUp={() => set("rows", moveIn(form.rows, i, -1))} onDown={() => set("rows", moveIn(form.rows, i, 1))} onDelete={() => set("rows", form.rows.filter((x) => x.key !== r.key))} />
-              </li>
-            ) : (
-              <li key={r.key} className={`rounded-lg border border-border p-2 ${canAlt(i) && r.orPrevious ? "-mt-1 ml-6" : ""}`}>
-                {canAlt(i) && r.orPrevious && <p className="mb-1 text-xs font-semibold text-accent">または（上の材料の代わり）</p>}
-                <div className="flex items-center gap-1">
-                  <div className="relative min-w-0 flex-[3]">
-                    <input
-                      value={r.name}
-                      onChange={(e) => setRow(r.key, { name: e.target.value, ingredientId: null })}
-                      onFocus={() => setFocusedRow(r.key)}
-                      onBlur={() => setTimeout(() => setFocusedRow((k) => (k === r.key ? null : k)), 150)}
-                      maxLength={60}
-                      placeholder="材料（例：とりもも）"
-                      aria-label="材料名"
-                      className="w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-base"
-                    />
-                    {r.ingredientId && <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-accent" title="食材とつながっています">✓</span>}
-                  </div>
+        <div className="space-y-3">
+          {editorBlocks(form.rows).map((b) =>
+            b.heading ? (
+              <div key={b.heading.key} className="rounded-xl border-2 border-accent/40 bg-accent/5 p-2">
+                <div className="mb-2 flex items-center gap-1">
+                  <span className="shrink-0 rounded bg-accent px-1.5 py-0.5 text-[10px] font-bold text-accent-fg">見出し</span>
                   <input
-                    value={r.amount}
-                    onChange={(e) => setRow(r.key, { amount: e.target.value })}
-                    maxLength={30}
-                    placeholder="分量"
-                    aria-label="分量"
-                    className="min-w-0 flex-[2] rounded-lg border border-border bg-surface px-2 py-1.5 text-base"
+                    value={b.heading.name}
+                    onChange={(e) => setRow(b.heading!.key, { name: e.target.value })}
+                    maxLength={20}
+                    placeholder="例：タレ、下味、トッピング"
+                    aria-label="見出しの名前"
+                    className="min-w-0 flex-1 rounded-lg border border-border bg-surface px-2 py-1.5 text-base font-semibold"
                   />
+                  <button
+                    type="button"
+                    onClick={() => set("rows", removeSection(form.rows, b.heading!.key))}
+                    className="shrink-0 px-1.5 py-1 text-xs text-muted"
+                  >
+                    見出しを外す
+                  </button>
                 </div>
-                {focusedRow === r.key && r.name.trim() && !r.ingredientId && (
-                  <ul className="mt-1 flex flex-wrap gap-1" aria-label="食材の候補">
-                    {suggestions.map((s) => (
-                      <li key={s.id}>
-                        <button
-                          type="button"
-                          onMouseDown={(e) => e.preventDefault()}
-                          onClick={() => {
-                            setRow(r.key, { name: s.name, ingredientId: s.id });
-                            setFocusedRow(null);
-                          }}
-                          className="rounded-full border border-accent px-2.5 py-1 text-xs text-accent"
-                        >
-                          {s.name}
-                        </button>
-                      </li>
-                    ))}
-                    {!matchIngredient(r.name, ingredients) && (
-                      <li>
-                        <button
-                          type="button"
-                          onMouseDown={(e) => e.preventDefault()}
-                          onClick={() => {
-                            setAdding({ rowKey: r.key, name: cleanIngredientName(r.name) || r.name.trim(), reading: "", category: "その他" });
-                            setFocusedRow(null);
-                          }}
-                          className="rounded-full border border-dashed border-border px-2.5 py-1 text-xs text-muted"
-                        >
-                          ＋ 食材の一覧に追加
-                        </button>
-                      </li>
-                    )}
-                  </ul>
-                )}
-                <div className="mt-1 flex items-center justify-between">
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                    <label className="flex items-center gap-1.5 text-xs text-muted">
-                      <input type="checkbox" checked={r.optional} onChange={(e) => setRow(r.key, { optional: e.target.checked })} />
-                      なくても可
-                    </label>
-                    {canAlt(i) && (
-                      <label className="flex items-center gap-1.5 text-xs text-muted">
-                        <input type="checkbox" checked={Boolean(r.orPrevious)} onChange={(e) => setRow(r.key, { orPrevious: e.target.checked })} />
-                        上の材料の代わり（または）
-                      </label>
-                    )}
-                  </div>
-                  <RowButtons onUp={() => set("rows", moveIn(form.rows, i, -1))} onDown={() => set("rows", moveIn(form.rows, i, 1))} onDelete={() => set("rows", form.rows.filter((x) => x.key !== r.key))} />
-                </div>
-              </li>
+                <ul className="space-y-2">{b.items.map(({ row, index }) => itemRow(row, index))}</ul>
+                <button
+                  type="button"
+                  onClick={() => set("rows", insertAfter(form.rows, b.lastIndex, emptyItem()))}
+                  className="mt-2 text-sm text-accent"
+                >
+                  ＋ 「{b.heading.name.trim() || "見出し"}」に材料
+                </button>
+              </div>
+            ) : (
+              <ul key={`loose-${b.lastIndex}`} className="space-y-2">
+                {b.items.map(({ row, index }) => itemRow(row, index))}
+              </ul>
             ),
           )}
-        </ul>
-        <div className="mt-2 flex gap-4 text-sm">
-          <button type="button" onClick={() => set("rows", [...form.rows, emptyItem()])} className="text-accent">
+        </div>
+        <div className="mt-3 flex gap-4 text-sm">
+          <button type="button" onClick={() => set("rows", appendLooseItem(form.rows, emptyItem(), newKey))} className="text-accent">
             ＋ 材料
           </button>
-          <button type="button" onClick={() => set("rows", [...form.rows, { key: newKey(), kind: "heading", name: "" }])} className="text-accent">
+          <button
+            type="button"
+            onClick={() => set("rows", [...form.rows, { key: newKey(), kind: "heading", name: "", isSection: true }, emptyItem()])}
+            className="text-accent"
+          >
             ＋ 見出し（タレなど）
           </button>
         </div>
+        <p className="mt-1 text-xs text-muted">「＋ 材料」は見出しの外（いちばん下）に足します。見出しの中に足すときは、見出しの枠の中のボタンを使ってください。</p>
       </section>
 
       <section className="mx-4 rounded-xl border border-border bg-surface p-4">

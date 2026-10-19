@@ -11,7 +11,11 @@ export type EditorItem = {
   /** 直前の材料の代わり（「キャベツ または カット野菜」） */
   orPrevious?: boolean;
 };
-export type EditorHeading = { key: number; kind: "heading"; name: string };
+/**
+ * 見出し。isSection = false は「ここで見出しのまとまりが終わる」区切り（画面には出さない）。
+ * 古い下書きには isSection がないので、名前があれば見出しとみなす
+ */
+export type EditorHeading = { key: number; kind: "heading"; name: string; isSection?: boolean };
 export type EditorRow = EditorItem | EditorHeading;
 
 type StoredIngredient = {
@@ -33,7 +37,7 @@ export function ingredientsToRows(ingredients: StoredIngredient[], nextKey: () =
   for (const ing of ingredients) {
     if ((ing.section ?? null) !== section) {
       section = ing.section ?? null;
-      rows.push({ key: nextKey(), kind: "heading", name: section ?? "" });
+      rows.push({ key: nextKey(), kind: "heading", name: section ?? "", isSection: section !== null });
     }
     rows.push({
       key: nextKey(),
@@ -79,4 +83,48 @@ export function rowsToIngredients(rows: EditorRow[]): StoredIngredient[] {
 /** タグの入力（「、」「,」空白区切り）→ タグの配列（重複・空を除く） */
 export function parseTags(text: string): string[] {
   return [...new Set(text.split(/[\s,、，#＃]+/).map((t) => t.trim()).filter(Boolean))];
+}
+
+// ---- 画面での見出しのまとまり ----
+
+export const isSectionHeading = (h: EditorHeading) => h.isSection ?? h.name.trim() !== "";
+
+/** 画面に出すまとまり。heading = null は見出しのない材料。index は rows の位置 */
+export type EditorBlock = { heading: EditorHeading | null; items: { row: EditorItem; index: number }[]; lastIndex: number };
+
+/** 行 → 見出しごとのまとまり（見出しのない並びが続けば1つに。材料のない、見出しなしのまとまりは出さない） */
+export function editorBlocks(rows: EditorRow[]): EditorBlock[] {
+  const blocks: EditorBlock[] = [];
+  let current: EditorBlock = { heading: null, items: [], lastIndex: -1 };
+  rows.forEach((r, index) => {
+    if (r.kind === "heading") {
+      // 見出しのない並びが続くときは1つにまとめる（区切りだけでは分けない）
+      if (!isSectionHeading(r) && !current.heading) return;
+      blocks.push(current);
+      current = { heading: isSectionHeading(r) ? r : null, items: [], lastIndex: index };
+      return;
+    }
+    current.items.push({ row: r, index });
+    current.lastIndex = index;
+  });
+  blocks.push(current);
+  return blocks.filter((b) => b.heading || b.items.length > 0);
+}
+
+/** 見出しの中（または見出しのない並び）の最後に材料を足す */
+export function insertAfter(rows: EditorRow[], index: number, row: EditorRow): EditorRow[] {
+  return [...rows.slice(0, index + 1), row, ...rows.slice(index + 1)];
+}
+
+/** 見出しの外（いちばん下）に材料を足す。最後が見出しのまとまりなら、区切りを入れてから足す */
+export function appendLooseItem(rows: EditorRow[], item: EditorItem, nextKey: () => number): EditorRow[] {
+  const blocks = editorBlocks(rows);
+  const last = blocks[blocks.length - 1];
+  if (!last?.heading) return [...rows, item];
+  return [...rows, { key: nextKey(), kind: "heading", name: "", isSection: false }, item];
+}
+
+/** 見出しを外す（中の材料は見出しのない材料になる） */
+export function removeSection(rows: EditorRow[], headingKey: number): EditorRow[] {
+  return rows.map((r) => (r.kind === "heading" && r.key === headingKey ? { ...r, name: "", isSection: false } : r));
 }

@@ -53,3 +53,29 @@ test("alternativeGroups / rowsToIngredients: 「または」", async () => {
   ];
   assert.deepEqual(rowsToIngredients(rows).map((i) => i.orPrevious), [false, true, false], "最初・見出しの直後は「または」にしない");
 });
+
+test("editorBlocks / appendLooseItem / removeSection: 見出しの中と外", async () => {
+  const { editorBlocks, appendLooseItem, removeSection, insertAfter } = await import("../src/lib/cook/editor.ts");
+  let k = 0;
+  const next = () => ++k;
+  const item = (name: string) => ({ key: next(), kind: "item" as const, ingredientId: null, name, amount: "", optional: false });
+  const rows = ingredientsToRows(stored, next);
+  const view = (rs: typeof rows) => editorBlocks(rs).map((b) => `${b.heading ? b.heading.name : "-"}:${b.items.map((i) => i.row.name).join(",")}`);
+  assert.deepEqual(view(rows), ["-:鶏もも肉", "タレ:しょうゆ,めんつゆ,みりん", "-:ねぎ"], "区切りは見出しとして出さない");
+
+  // 見出しのあとに「＋ 材料」（外）を押すと、見出しの外に入る
+  const withSection = [item("豚肉"), { key: next(), kind: "heading" as const, name: "下味", isSection: true }, item("酒")];
+  const added = appendLooseItem(withSection, item("キャベツ"), next);
+  assert.deepEqual(view(added), ["-:豚肉", "下味:酒", "-:キャベツ"]);
+  assert.deepEqual(rowsToIngredients(added).map((i) => [i.name, i.section]), [["豚肉", null], ["酒", "下味"], ["キャベツ", null]]);
+  assert.deepEqual(view(appendLooseItem(added, item("にんじん"), next)), ["-:豚肉", "下味:酒", "-:キャベツ,にんじん"], "すでに外なら続けて足す");
+
+  // 見出しの中に足す
+  const block = editorBlocks(added)[1];
+  assert.deepEqual(view(insertAfter(added, block.lastIndex, item("しょうが"))), ["-:豚肉", "下味:酒,しょうが", "-:キャベツ"]);
+  // 名前を入れる前の新しい見出しも見出しとして出す
+  assert.deepEqual(view([...added, { key: next(), kind: "heading" as const, name: "", isSection: true }]).at(-1), ":");
+  // 見出しを外すと中の材料は外に出る
+  assert.deepEqual(view(removeSection(added, block.heading!.key)), ["-:豚肉,酒,キャベツ"], "見出しのない並びは1つにまとめて出す");
+  assert.deepEqual(rowsToIngredients(removeSection(added, block.heading!.key)).map((i) => i.section), [null, null, null]);
+});
