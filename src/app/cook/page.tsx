@@ -42,7 +42,7 @@ export default async function CookHomePage({ searchParams }: PageProps<"/cook">)
 
   return (
     <>
-      <PageHeader title={mark ? MARKS[mark] : "レシピ"} back={mark ? "/cook/me" : undefined} action={<NotificationBell myId={member.id} scope="cook" />} />
+      <PageHeader title={mark ? MARKS[mark] : "レシピ"} back={mark ? "/cook/me" : undefined} action={<HeaderActions myId={member.id} />} />
       <form action="/cook" className="mx-4 mb-3">
         {scope !== "all" && <input type="hidden" name="scope" value={scope} />}
         {categoryId && <input type="hidden" name="cat" value={categoryId} />}
@@ -114,5 +114,25 @@ export default async function CookHomePage({ searchParams }: PageProps<"/cook">)
         </ul>
       )}
     </>
+  );
+}
+
+/** レシピ画面の上: ランキング・登録・通知 */
+function HeaderActions({ myId }: { myId: string }) {
+  const icon = "h-6 w-6";
+  return (
+    <div className="flex items-center">
+      <Link href="/cook/ranking" aria-label="ランキング" className="rounded-full p-2">
+        <svg viewBox="0 0 24 24" className={icon} fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <path d="M8 4h8v5a4 4 0 0 1-8 0zM8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M8 20h8M10 17h4" />
+        </svg>
+      </Link>
+      <NotificationBell myId={myId} scope="cook" />
+      <Link href="/cook/new" aria-label="レシピを登録" className="ml-1 flex h-9 w-9 items-center justify-center rounded-full bg-accent text-accent-fg">
+        <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" aria-hidden>
+          <path d="M12 5v14M5 12h14" />
+        </svg>
+      </Link>
+    </div>
   );
 }

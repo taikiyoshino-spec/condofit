@@ -17,7 +17,7 @@ export default async function NewRecipePage({ searchParams }: PageProps<"/cook/n
   ]);
   return (
     <>
-      <PageHeader title={copyFrom ? "コピーしてアレンジ" : "レシピを登録"} back={copyFrom ? `/cook/r/${copyFrom.id}` : undefined} />
+      <PageHeader title={copyFrom ? "コピーしてアレンジ" : "レシピを登録"} back={copyFrom ? `/cook/r/${copyFrom.id}` : "/cook"} />
       {copyFrom ? (
         <RecipeEditor mode="new" recipe={null} copyFrom={copyFrom} categories={categories} ingredients={ingredients} />
       ) : (

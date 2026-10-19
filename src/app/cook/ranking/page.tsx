@@ -21,7 +21,7 @@ export default async function CookRankingPage({ searchParams }: PageProps<"/cook
 
   return (
     <>
-      <PageHeader title="ランキング" />
+      <PageHeader title="ランキング" back="/cook" />
       <div className="mx-4 mb-3 flex items-center justify-between">
         <Link href={`/cook/ranking?m=${addMonths(month, -1)}`} className="rounded px-3 py-1 text-muted" aria-label="前の月">
           ‹

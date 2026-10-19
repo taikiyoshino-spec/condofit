@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireCookUser } from "@/lib/auth/session";
-import { getRecipe, getRecipeReactions, listCategories, myHouseholdSize, shoppingHints } from "@/lib/cook/queries";
+import { getRecipe, getRecipeReactions, listCategories, listPantry, myHouseholdSize, myStapleIds, shoppingHints } from "@/lib/cook/queries";
+import { usedPantryItems } from "@/lib/cook/pantry";
 import { PageHeader } from "@/components/page";
 import { recipePhotoUrl } from "@/lib/cook/photo";
 import { Owner } from "../../owner";
@@ -16,14 +17,18 @@ export default async function RecipePage({ params, searchParams }: PageProps<"/c
   const { id } = await params;
   if (!UUID_RE.test(id)) notFound();
   const member = await requireCookUser();
-  const [recipe, categories, householdSize, reactions, hints] = await Promise.all([
+  const [recipe, categories, householdSize, reactions, hints, pantry, staples] = await Promise.all([
     getRecipe(id),
     listCategories(),
     myHouseholdSize(),
     getRecipeReactions(id, member.id),
     shoppingHints(),
+    listPantry(),
+    myStapleIds(),
   ]);
   if (!recipe) notFound();
+  // 「作った」のあとに「使い切った？」と聞く食材（D10）
+  const pantryUsed = usedPantryItems(recipe.ingredients, pantry, staples).map((p) => ({ id: p.id, name: p.name }));
   const isAdmin = member.role === "admin" && member.apps === "all";
   const openCooked = (await searchParams).cooked === "1";
   const category = categories.find((c) => c.id === recipe.categoryId)?.name;
@@ -87,6 +92,7 @@ export default async function RecipePage({ params, searchParams }: PageProps<"/c
         favoriteCount={recipe.favoriteCount}
         cookedCount={recipe.cookedCount}
         openCooked={openCooked}
+        pantryUsed={pantryUsed}
       />
 
       <IngredientList recipeId={recipe.id} ingredients={recipe.ingredients} servings={recipe.servings} initialServings={recipe.servings ? householdSize : null} hints={hints} />

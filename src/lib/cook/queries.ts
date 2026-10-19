@@ -2,6 +2,11 @@ import "server-only";
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
 import type { ShoppingItem } from "./shopping";
+import type { SuggestIngredient } from "./pantry";
+
+/** RPC が返す uuid の集合（値の配列でも {関数名: 値} の配列でも受ける） */
+const uuidList = (data: unknown): string[] =>
+  ((data ?? []) as unknown[]).map((x) => String(x && typeof x === "object" ? Object.values(x)[0] : x));
 
 // CondoCook の読み取り。見える範囲（グループ／家族だけ／自分だけ）は RLS で絞られている
 
@@ -20,6 +25,8 @@ export type RecipeSummary = {
   thumbPath: string | null;
   createdAt: string;
   ingredientNames: string[];
+  /** 材料（提案の計算に使う） */
+  ingredients: SuggestIngredient[];
   /** 作られた回数（作成者本人の分を除く）・お気に入りの数 */
   cookedCount: number;
   favoriteCount: number;
@@ -33,7 +40,7 @@ export type RecipeIngredient = {
   section: string | null;
 };
 
-export type RecipeDetail = Omit<RecipeSummary, "ingredientNames"> & {
+export type RecipeDetail = Omit<RecipeSummary, "ingredientNames" | "ingredients"> & {
   memo: string | null;
   sourceUrl: string | null;
   sourceName: string | null;
@@ -68,7 +75,7 @@ type SummaryRow = {
 const SUMMARY =
   "id, title, owner_user_id, visibility, servings, cook_minutes, category_id, tags, thumb_path, created_at, cooked_count, favorite_count";
 
-const toSummary = (r: SummaryRow, ingredientNames: string[] = []): RecipeSummary => ({
+const toSummary = (r: SummaryRow, ingredients: SuggestIngredient[] = []): RecipeSummary => ({
   id: r.id,
   title: r.title,
   ownerId: r.owner_user_id,
@@ -79,7 +86,8 @@ const toSummary = (r: SummaryRow, ingredientNames: string[] = []): RecipeSummary
   tags: r.tags ?? [],
   thumbPath: r.thumb_path,
   createdAt: r.created_at,
-  ingredientNames,
+  ingredientNames: ingredients.map((i) => i.name),
+  ingredients,
   cookedCount: r.cooked_count ?? 0,
   favoriteCount: r.favorite_count ?? 0,
 });
@@ -89,13 +97,14 @@ export async function listRecipes(): Promise<RecipeSummary[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("recipes")
-    .select(`${SUMMARY}, recipe_ingredients(name)`)
+    .select(`${SUMMARY}, recipe_ingredients(name, ingredient_id, optional)`)
     .is("deleted_at", null)
     .order("created_at", { ascending: false })
     .limit(500);
   if (error) throw error;
-  return (data as unknown as (SummaryRow & { recipe_ingredients: { name: string }[] })[]).map((r) =>
-    toSummary(r, r.recipe_ingredients.map((i) => i.name)),
+  type Row = SummaryRow & { recipe_ingredients: { name: string; ingredient_id: string | null; optional: boolean }[] };
+  return (data as unknown as Row[]).map((r) =>
+    toSummary(r, r.recipe_ingredients.map((i) => ({ name: i.name, ingredientId: i.ingredient_id, optional: i.optional }))),
   );
 }
 
@@ -292,10 +301,83 @@ export async function shoppingHints(): Promise<{ inPantry: string[]; staples: st
   const supabase = await createClient();
   const [pantry, staples, list] = await Promise.all([
     supabase.from("pantry_items").select("ingredient_id").not("ingredient_id", "is", null),
-    supabase.from("ingredients").select("id").eq("is_staple", true),
+    supabase.rpc("my_staple_ids"),
     supabase.from("shopping_items").select("ingredient_id").is("bought_at", null).not("ingredient_id", "is", null),
   ]);
   const ids = (rows: { ingredient_id?: unknown; id?: unknown }[] | null, col: "ingredient_id" | "id") =>
     [...new Set((rows ?? []).map((r) => r[col] as string))];
-  return { inPantry: ids(pantry.data, "ingredient_id"), staples: ids(staples.data, "id"), inList: ids(list.data, "ingredient_id") };
+  return {
+    inPantry: ids(pantry.data, "ingredient_id"),
+    staples: uuidList(staples.data),
+    inList: ids(list.data, "ingredient_id"),
+  };
+}
+
+export type PantryItem = {
+  id: string;
+  ingredientId: string | null;
+  name: string;
+  category: string;
+  boughtOn: string;
+  expiresOn: string | null;
+  storage: "fridge" | "freezer";
+};
+
+/** 家にある食材（自分の家族の分） */
+export async function listPantry(): Promise<PantryItem[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("pantry_items")
+    .select("id, ingredient_id, name, category, bought_on, expires_on, storage")
+    .order("expires_on", { nullsFirst: false })
+    .order("name");
+  if (error) throw error;
+  return data.map((p) => ({
+    id: p.id as string,
+    ingredientId: (p.ingredient_id as string | null) ?? null,
+    name: p.name as string,
+    category: p.category as string,
+    boughtOn: p.bought_on as string,
+    expiresOn: (p.expires_on as string | null) ?? null,
+    storage: p.storage === "freezer" ? "freezer" : "fridge",
+  }));
+}
+
+/** 自分の家族の「いつもある」食材（食材マスタの初期値＋家族ごとの差分） */
+export const myStapleIds = cache(async (): Promise<string[]> => {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("my_staple_ids");
+  if (error) throw error;
+  return uuidList(data);
+});
+
+export type Purchase = { id: string; ingredientId: string | null; name: string; times: number; lastBoughtOn: string };
+
+/** 過去に買った物（よく買う順） */
+export async function listPurchases(limit = 40): Promise<Purchase[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("household_purchases")
+    .select("id, ingredient_id, name, times, last_bought_on")
+    .order("times", { ascending: false })
+    .order("last_bought_on", { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return data.map((p) => ({
+    id: p.id as string,
+    ingredientId: (p.ingredient_id as string | null) ?? null,
+    name: p.name as string,
+    times: p.times as number,
+    lastBoughtOn: p.last_bought_on as string,
+  }));
+}
+
+/** 最近（1週間以内）家族が作ったレシピ（提案で下げる。D17） */
+export async function recentHouseholdCookIds(): Promise<string[]> {
+  const supabase = await createClient();
+  const members = await myHouseholdMemberIds();
+  if (members.length === 0) return [];
+  const since = new Date(Date.now() - 7 * 86400000).toISOString();
+  const { data } = await supabase.from("recipe_cooks").select("recipe_id").in("user_id", members).gte("cooked_at", since);
+  return [...new Set((data ?? []).map((c) => c.recipe_id as string))];
 }

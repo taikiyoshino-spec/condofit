@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { removePantryItemsAction } from "@/app/actions/cook-pantry";
 import {
   deleteCookAction,
   deleteRecipeCommentAction,
@@ -31,6 +32,7 @@ export function ReactionBar({
   favoriteCount,
   cookedCount,
   openCooked,
+  pantryUsed,
 }: {
   recipeId: string;
   favorite: boolean;
@@ -38,6 +40,8 @@ export function ReactionBar({
   favoriteCount: number;
   cookedCount: number;
   openCooked: boolean;
+  /** このレシピで使う、家にある食材（いつもあるものを除く） */
+  pantryUsed: { id: string; name: string }[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -85,15 +89,16 @@ export function ReactionBar({
         </button>
       </div>
       <BottomSheet open={cookOpen} onClose={() => setCookOpen(false)} title="作った！を記録">
-        {cookOpen && <CookForm recipeId={recipeId} onDone={() => setCookOpen(false)} />}
+        {cookOpen && <CookForm recipeId={recipeId} pantryUsed={pantryUsed} onDone={() => setCookOpen(false)} />}
       </BottomSheet>
     </>
   );
 }
 
-function CookForm({ recipeId, onDone }: { recipeId: string; onDone: () => void }) {
+function CookForm({ recipeId, pantryUsed, onDone }: { recipeId: string; pantryUsed: { id: string; name: string }[]; onDone: () => void }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  const [askUsedUp, setAskUsedUp] = useState(false);
   const [note, setNote] = useState("");
   const [photo, setPhoto] = useState<{ full: Blob; thumb: Blob; preview: string } | null>(null);
   useEffect(() => () => void (photo && URL.revokeObjectURL(photo.preview)), [photo]);
@@ -119,13 +124,16 @@ function CookForm({ recipeId, onDone }: { recipeId: string; onDone: () => void }
       const r = await recordCookAction(recipeId, fd);
       if (!r.ok) showToast(r.error);
       else showToast("「作った」を記録しました");
-      // 写真だけ失敗した場合も記録はできているので閉じる
+      // 写真だけ失敗した場合も記録はできている。家にある食材を使ったら「使い切った？」を聞く
       if (r.ok || r.error.startsWith("記録しました")) {
-        onDone();
         router.replace(`/cook/r/${recipeId}`, { scroll: false });
         router.refresh();
+        if (pantryUsed.length > 0) setAskUsedUp(true);
+        else onDone();
       }
     });
+
+  if (askUsedUp) return <UsedUpForm items={pantryUsed} onDone={onDone} />;
 
   const length = [...note.trim()].length;
   return (
@@ -167,6 +175,60 @@ function CookForm({ recipeId, onDone }: { recipeId: string; onDone: () => void }
       >
         {pending ? "記録中…" : "記録する"}
       </button>
+    </div>
+  );
+}
+
+/** 使い切った食材を「ない」にする。初期値はチェックなし（消しすぎを防ぐ。D10） */
+function UsedUpForm({ items, onDone }: { items: { id: string; name: string }[]; onDone: () => void }) {
+  const [pending, startTransition] = useTransition();
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const remove = () =>
+    startTransition(async () => {
+      const r = await removePantryItemsAction([...selected]);
+      if (!r.ok) return showToast(r.error);
+      showToast(`${r.count ?? 0}品を食材リストから消しました`);
+      onDone();
+    });
+  return (
+    <div className="space-y-3">
+      <p className="font-semibold">使い切った食材はありますか？</p>
+      <p className="text-xs text-muted">チェックしたものを食材リストから消します（「ない」にします）。</p>
+      <ul className="divide-y divide-border">
+        {items.map((p) => (
+          <li key={p.id}>
+            <label className="flex items-center gap-3 py-2.5">
+              <input
+                type="checkbox"
+                checked={selected.has(p.id)}
+                onChange={(e) =>
+                  setSelected((s) => {
+                    const next = new Set(s);
+                    if (e.target.checked) next.add(p.id);
+                    else next.delete(p.id);
+                    return next;
+                  })
+                }
+                className="h-5 w-5 shrink-0 accent-[var(--accent)]"
+              />
+              <span>{p.name}</span>
+            </label>
+          </li>
+        ))}
+      </ul>
+      <div className="grid grid-cols-2 gap-2">
+        <button type="button" onClick={onDone} className="rounded-lg border border-border py-3 text-sm">
+          まだある
+        </button>
+        <button
+          type="button"
+          disabled={pending || selected.size === 0}
+          onClick={remove}
+          className="rounded-lg bg-accent py-3 text-sm font-semibold text-accent-fg disabled:opacity-50"
+        >
+          {selected.size}品を消す
+        </button>
+      </div>
     </div>
   );
 }

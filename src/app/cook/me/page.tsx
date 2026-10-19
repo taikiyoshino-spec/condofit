@@ -32,6 +32,7 @@ export default async function CookMyPage() {
     { href: "/cook?scope=mine", label: "自分のレシピ", count: recipes.filter((r) => r.ownerId === member.id).length },
     { href: "/cook?list=fav", label: "お気に入り", count: marks.favorites.filter((id) => visible.has(id)).length },
     { href: "/cook?list=want", label: "作りたい", count: marks.wants.filter((id) => visible.has(id)).length },
+    { href: "/cook/ranking", label: "ランキング", count: null },
   ];
   return (
     <>
@@ -42,7 +43,8 @@ export default async function CookMyPage() {
             <Link href={l.href} className="flex items-center justify-between px-4 py-3.5">
               <span>{l.label}</span>
               <span className="text-muted">
-                {l.count}件 <span aria-hidden>›</span>
+                {l.count !== null && `${l.count}件 `}
+                <span aria-hidden>›</span>
               </span>
             </Link>
           </li>

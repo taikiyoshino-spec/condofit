@@ -1,6 +1,6 @@
 "use client";
 
-import { useOptimistic, useState, useTransition } from "react";
+import { useOptimistic, useTransition } from "react";
 import {
   addShoppingItemsAction,
   deleteShoppingItemsAction,
@@ -8,9 +8,9 @@ import {
   setShoppingBoughtAction,
 } from "@/app/actions/cook-shopping";
 import { showToast } from "@/components/toaster";
-import { matchIngredient, searchIngredients } from "@/lib/cook/ingredients";
 import { groupShoppingItems, type ShoppingGroup, type ShoppingItem } from "@/lib/cook/shopping";
 import type { IngredientOption } from "@/lib/cook/queries";
+import { IngredientAddBox } from "../ingredient-add-box";
 
 type Change = { type: "bought"; ids: string[]; bought: boolean } | { type: "delete"; ids: string[] };
 
@@ -44,7 +44,18 @@ export function ShoppingList({ items, ingredients }: { items: ShoppingItem[]; in
 
   return (
     <div className="pb-8">
-      <AddBox ingredients={ingredients} />
+      <div className="mx-4 mb-4">
+        <IngredientAddBox
+          ingredients={ingredients}
+          placeholder="買う物を追加（例：トリ）"
+          withAmount
+          onAdd={async (ingredient, name, amount) => {
+            const r = await addShoppingItemsAction([{ ingredientId: ingredient?.id ?? null, name, amount, recipeId: null }]);
+            if (!r.ok) showToast(r.error);
+            return r.ok;
+          }}
+        />
+      </div>
 
       {pending.length === 0 && bought.length === 0 ? (
         <p className="mx-4 rounded-xl border border-border bg-surface p-6 text-center text-sm text-muted">
@@ -125,78 +136,6 @@ function GroupList({
           </ul>
         </div>
       ))}
-    </div>
-  );
-}
-
-/** 手で追加する欄（食材の候補を出す。候補から選ぶと食材としてまとまる） */
-function AddBox({ ingredients }: { ingredients: IngredientOption[] }) {
-  const [pending, startTransition] = useTransition();
-  const [name, setName] = useState("");
-  const [amount, setAmount] = useState("");
-  const [picked, setPicked] = useState<IngredientOption | null>(null);
-  const suggestions = picked ? [] : searchIngredients(name, ingredients, 6);
-
-  const add = () =>
-    startTransition(async () => {
-      const ingredient = picked ?? matchIngredient(name, ingredients);
-      const r = await addShoppingItemsAction([{ ingredientId: ingredient?.id ?? null, name: ingredient?.name ?? name, amount, recipeId: null }]);
-      if (!r.ok) return showToast(r.error);
-      setName("");
-      setAmount("");
-      setPicked(null);
-    });
-
-  return (
-    <div className="relative mx-4 mb-4">
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (name.trim()) add();
-        }}
-        className="flex gap-2"
-      >
-        <input
-          value={name}
-          onChange={(e) => {
-            setName(e.target.value);
-            setPicked(null);
-          }}
-          placeholder="買う物を追加（例：トリ）"
-          aria-label="買う物"
-          maxLength={30}
-          className="min-w-0 flex-1 rounded-xl border border-border bg-surface px-3 py-2.5 text-base"
-        />
-        <input
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          placeholder="量"
-          aria-label="量（任意）"
-          maxLength={30}
-          className="w-16 rounded-xl border border-border bg-surface px-2 py-2.5 text-base"
-        />
-        <button type="submit" disabled={pending || !name.trim()} className="rounded-xl bg-accent px-4 text-sm font-semibold text-accent-fg disabled:opacity-50">
-          追加
-        </button>
-      </form>
-      {suggestions.length > 0 && (
-        <ul className="absolute inset-x-0 top-full z-10 mt-1 overflow-hidden rounded-xl border border-border bg-surface shadow-lg">
-          {suggestions.map((s) => (
-            <li key={s.id}>
-              <button
-                type="button"
-                onClick={() => {
-                  setPicked(s);
-                  setName(s.name);
-                }}
-                className="w-full px-3 py-2 text-left text-sm hover:bg-border/40"
-              >
-                {s.name}
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
     </div>
   );
 }

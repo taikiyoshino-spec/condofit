@@ -953,4 +953,44 @@ await test("買い物リストの通知: 追加が続く間はまとめ、5分�
   assert.equal((await notes(idE, "cook_shopping")).length, 0, "本人には送らない");
 });
 
+await test("食材リスト: 手で追加・冷凍への切り替え・期限の変更・過去に買った物", async () => {
+  const [{ id: pork, fridge_days: fd, freezer_days: zd }] = await asSuper(
+    "select id, fridge_days, freezer_days from ingredients where fridge_days is not null and freezer_days is not null and name = '豚こま切れ肉'",
+  );
+  assert.equal((await asE("select add_pantry_items($1::jsonb) n", [JSON.stringify([{ ingredient_id: pork, name: "ぶた" }, { name: " 手作りジャム " }, { name: "" }])]))[0].n, 2);
+  const [p] = await as("C", "select id, name, storage, expires_on - bought_on as days from pantry_items where ingredient_id = $1", [pork]);
+  assert.equal(p.name, "豚こま切れ肉", "マスタの名前に");
+  assert.equal(p.days, fd, "家族（C）にも見える。期限の目安は冷蔵の日数");
+  await as("C", "select update_pantry_item($1, 'freezer', null)", [p.id]);
+  assert.equal((await asE("select expires_on - bought_on as days from pantry_items where id = $1", [p.id]))[0].days, zd, "冷凍にすると冷凍の日数で計算し直す");
+  await asE("select update_pantry_item($1, 'freezer', '2030-01-01')", [p.id]);
+  assert.equal((await asE("select to_char(expires_on, 'YYYY-MM-DD') d from pantry_items where id = $1", [p.id]))[0].d, "2030-01-01", "手で直せる");
+  // もう一度買っても冷凍のまま、冷凍の日数で
+  await asE("select add_pantry_items($1::jsonb)", [JSON.stringify([{ ingredient_id: pork }])]);
+  const [p2] = await asE("select storage, expires_on - bought_on as days from pantry_items where id = $1", [p.id]);
+  assert.deepEqual([p2.storage, p2.days], ["freezer", zd]);
+  await rejects(() => as("A", "select update_pantry_item($1, 'fridge', null)", [p.id]), /not_found/, "別の家族は変えられない");
+  await rejects(() => asE("update pantry_items set expires_on = null where id = $1", [p.id]), /permission denied/);
+  const history = await asE("select name, times from household_purchases order by name");
+  assert.equal(history.find((h) => h.name === "豚こま切れ肉").times, 2, "過去に買った物に回数が残る");
+  assert.ok(history.some((h) => h.name === "鶏もも肉"), "前のテストで買った物も残っている");
+  assert.equal((await as("A", "select id from household_purchases")).length, 0);
+});
+
+await test("いつもある: 初期値（食材マスタ）から家族ごとに外したり足したりできる", async () => {
+  const [{ id: salt }] = await asSuper("select id from ingredients where is_staple limit 1");
+  const [{ id: kale }] = await asSuper("select id from ingredients where not is_staple and merged_into is null and active limit 1");
+  const mine = async (who) => (await (who === "E" ? asE : (s) => as(who, s))("select my_staple_ids() id")).map((r) => r.id);
+  assert.ok((await mine("E")).includes(salt), "初期値");
+  await asE("select set_staple($1, false)", [salt]);
+  await asE("select set_staple($1, true)", [kale]);
+  assert.equal((await mine("C")).includes(salt), false, "家族で共通");
+  assert.equal((await mine("C")).includes(kale), true);
+  assert.equal((await mine("A")).includes(salt), true, "別の家族には影響しない");
+  await asE("select set_staple($1, true)", [salt]);
+  assert.equal((await asE("select * from household_staples where ingredient_id = $1", [salt])).length, 0, "初期値に戻したら差分は消す");
+  await rejects(() => asE("insert into household_staples (household_id, ingredient_id, is_staple) select household_id, $2, true from household_members where user_id = $1", [idE, salt]), /permission denied/);
+  await rejects(() => as("D", "select set_staple($1, true)", [salt]), /forbidden/);
+});
+
 console.log(`\n${passed} passed${process.exitCode ? ", some FAILED" : ""}`);
