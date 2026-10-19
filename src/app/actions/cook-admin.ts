@@ -129,3 +129,28 @@ export async function moveCategoryAction(id: string, direction: -1 | 1): Promise
   revalidate();
   return { ok: true };
 }
+
+// ---- 家族 ----
+
+/** メンバーを別の家族に移す（householdId = null なら新しい家族を作る）。空になった家族のものは移した先にまとめる */
+export async function moveToHouseholdAction(userId: string, householdId: string | null): Promise<AdminResult> {
+  await requireCookAdmin();
+  if (!UUID_RE.test(userId) || (householdId !== null && !UUID_RE.test(householdId))) return { ok: false, error: "不正なメンバーです" };
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("admin_move_to_household", { p_user: userId, p_household: householdId });
+  if (error) return { ok: false, error: "移せませんでした" };
+  revalidate();
+  return { ok: true };
+}
+
+export async function renameHouseholdAction(householdId: string, rawName: string): Promise<AdminResult> {
+  await requireCookAdmin();
+  const name = cleanName(rawName, 30);
+  if (!UUID_RE.test(householdId)) return { ok: false, error: "不正な家族です" };
+  if (!name) return { ok: false, error: "名前を30文字以内で入力してください" };
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("admin_rename_household", { p_household: householdId, p_name: name });
+  if (error) return { ok: false, error: "保存できませんでした" };
+  revalidate();
+  return { ok: true };
+}

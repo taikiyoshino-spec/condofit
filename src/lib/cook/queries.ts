@@ -381,3 +381,24 @@ export async function recentHouseholdCookIds(): Promise<string[]> {
   const { data } = await supabase.from("recipe_cooks").select("recipe_id").in("user_id", members).gte("cooked_at", since);
   return [...new Set((data ?? []).map((c) => c.recipe_id as string))];
 }
+
+export type AdminHousehold = { id: string; name: string; memberIds: string[] };
+
+/** 家族とメンバー（管理者用。家族に入っていないメンバーは noHousehold） */
+export async function listHouseholdsForAdmin(): Promise<{ households: AdminHousehold[]; noHousehold: string[] }> {
+  const supabase = await createClient();
+  const [h, hm, gm] = await Promise.all([
+    supabase.from("households").select("id, name").order("created_at"),
+    supabase.from("household_members").select("user_id, household_id"),
+    supabase.from("group_members").select("user_id").is("removed_at", null),
+  ]);
+  if (h.error || hm.error || gm.error) throw h.error ?? hm.error ?? gm.error;
+  const active = new Set(gm.data.map((m) => m.user_id as string));
+  const households = h.data.map((x) => ({
+    id: x.id as string,
+    name: x.name as string,
+    memberIds: hm.data.filter((m) => m.household_id === x.id && active.has(m.user_id as string)).map((m) => m.user_id as string),
+  }));
+  const inHousehold = new Set(hm.data.map((m) => m.user_id as string));
+  return { households, noHousehold: [...active].filter((id) => !inHousehold.has(id)) };
+}

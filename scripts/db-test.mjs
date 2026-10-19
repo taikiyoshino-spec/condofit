@@ -993,4 +993,36 @@ await test("いつもある: 初期値（食材マスタ）から家族ごとに
   await rejects(() => as("D", "select set_staple($1, true)", [salt]), /forbidden/);
 });
 
+await test("家族の管理: 管理者がメンバーを移し、空になった家族のものは移した先にまとめる", async () => {
+  // A の家族に食材・買い物・過去に買った物を入れておく（C・E の家族と同じ食材も）
+  const [{ id: pork }] = await asSuper("select id from ingredients where name = '豚こま切れ肉'");
+  await as("A", "select add_pantry_items($1::jsonb)", [JSON.stringify([{ ingredient_id: pork }, { name: "Aのジャム" }])]);
+  await as("A", "select add_shopping_items($1::jsonb)", [JSON.stringify([{ name: "Aの牛乳" }])]);
+  const [{ id: salt }] = await asSuper("select id from ingredients where is_staple limit 1");
+  await as("A", "select set_staple($1, false)", [salt]);
+  const [{ household_id: hA }] = await asSuper("select household_id from household_members where user_id = $1", [ids.A]);
+  const [{ household_id: hC }] = await asSuper("select household_id from household_members where user_id = $1", [ids.C]);
+  const [{ times: before }] = await asSuper("select times from household_purchases where household_id = $1 and ingredient_id = $2", [hC, pork]);
+
+  await rejects(() => as("C", "select admin_move_to_household($1, $2)", [ids.A, hC]), /forbidden/, "管理者だけ");
+  await as("A", "select admin_move_to_household($1, $2)", [ids.A, hC]);
+  assert.equal((await asSuper("select id from households where id = $1", [hA])).length, 0, "空になった家族は消す");
+  const pantry = await asE("select name from pantry_items order by name");
+  assert.ok(pantry.some((p) => p.name === "Aのジャム"), "食材リストをまとめる");
+  assert.equal(pantry.filter((p) => p.name === "豚こま切れ肉").length, 1, "同じ食材は1行");
+  assert.ok((await asE("select name from shopping_items")).some((s) => s.name === "Aの牛乳"), "買い物リストをまとめる");
+  const [{ times: after }] = await asSuper("select times from household_purchases where household_id = $1 and ingredient_id = $2", [hC, pork]);
+  assert.equal(after, before + 1, "過去に買った回数は足す");
+  assert.equal((await asE("select my_staple_ids() id")).some((r) => r.id === salt), false, "いつもあるの差分もまとめる");
+
+  // 新しい家族を作って移す・名前を変える。グループ外の人は移せない
+  const [{ h: hNew }] = await as("A", "select admin_move_to_household($1, null) h", [ids.A]);
+  assert.equal((await asSuper("select name from households where id = $1", [hNew]))[0].name, "Aさん");
+  assert.equal((await asSuper("select count(*)::int n from household_members where household_id = $1", [hC]))[0].n, 2, "元の家族は残る（C・E がいる）");
+  await as("A", "select admin_rename_household($1, '  吉野家  ')", [hNew]);
+  assert.equal((await asSuper("select name from households where id = $1", [hNew]))[0].name, "吉野家");
+  await rejects(() => as("A", "select admin_move_to_household($1, $2)", [ids.D, hNew]), /not_found/);
+  await rejects(() => asE("select admin_rename_household($1, 'x')", [hNew]), /forbidden/);
+});
+
 console.log(`\n${passed} passed${process.exitCode ? ", some FAILED" : ""}`);

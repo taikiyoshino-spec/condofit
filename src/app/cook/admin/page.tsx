@@ -9,6 +9,7 @@ export default async function CookAdminPage() {
       <PageHeader title="管理" back="/cook/me" />
       <MenuList
         items={[
+          { href: "/cook/admin/households", label: "家族" },
           { href: "/cook/admin/ingredients", label: "食材の一覧" },
           { href: "/cook/admin/categories", label: "レシピのカテゴリ" },
         ]}

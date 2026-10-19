@@ -52,7 +52,7 @@ export default async function CookMyPage() {
       </ul>
       {member.role === "admin" && member.apps === "all" && (
         <Link href="/cook/admin" className="mx-4 mb-4 flex items-center justify-between rounded-xl border border-border bg-surface p-4">
-          <span>管理（食材の一覧・カテゴリ）</span>
+          <span>管理（家族・食材の一覧・カテゴリ）</span>
           <span className="text-muted" aria-hidden>
             ›
           </span>
