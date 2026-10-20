@@ -8,6 +8,8 @@ import { addIngredientAction, type ImportDraft } from "@/app/actions/cook-import
 import { BottomSheet } from "@/components/bottom-sheet";
 import { showToast } from "@/components/toaster";
 import { resizeToJpeg } from "@/lib/client/resize-image";
+import { moveKeyTo } from "@/lib/client/sort";
+import { useLongPressSort } from "@/lib/client/use-long-press-sort";
 import {
   appendLooseItem,
   editorBlocks,
@@ -164,9 +166,14 @@ export function RecipeEditor({
   const canAlt = (i: number) => i > 0 && form.rows[i - 1].kind === "item";
   // 材料の1行（r は行、i は form.rows の位置）
   const itemRow = (r: EditorItem, i: number) => (
-    <li key={r.key} className={`rounded-lg border border-border p-2 ${canAlt(i) && r.orPrevious ? "-mt-1 ml-6" : ""}`}>
+    <li
+      key={r.key}
+      ref={rowSort.register(r.key)}
+      className={`rounded-lg border p-2 ${canAlt(i) && r.orPrevious ? "-mt-1 ml-6" : ""} ${rowSort.dragging === r.key ? "relative z-10 border-accent bg-surface shadow-lg ring-2 ring-accent" : "border-border"}`}
+    >
       {canAlt(i) && r.orPrevious && <p className="mb-1 text-xs font-semibold text-accent">または（上の材料の代わり）</p>}
       <div className="flex items-center gap-1">
+        <DragHandle label={`${r.name || "材料"}を並べ替え`} {...rowSort.handleProps(r.key)} />
         <div className="relative min-w-0 flex-[3]">
           <input
             value={r.name}
@@ -236,19 +243,15 @@ export function RecipeEditor({
             </label>
           )}
         </div>
-        <RowButtons onUp={() => set("rows", moveIn(form.rows, i, -1))} onDown={() => set("rows", moveIn(form.rows, i, 1))} onDelete={() => set("rows", form.rows.filter((x) => x.key !== r.key))} />
+        <DeleteButton onDelete={() => set("rows", form.rows.filter((x) => x.key !== r.key))} />
       </div>
     </li>
   );
   const setRow = (key: number, patch: Partial<EditorItem> | { name: string }) =>
     setForm((f) => ({ ...f, rows: f.rows.map((r) => (r.key === key ? ({ ...r, ...patch } as EditorRow) : r)) }));
-  const moveIn = <T,>(list: T[], i: number, d: number) => {
-    const to = i + d;
-    if (to < 0 || to >= list.length) return list;
-    const next = [...list];
-    [next[i], next[to]] = [next[to], next[i]];
-    return next;
-  };
+  // 長押しで持ち上げて並べ替える（材料は見出しの枠の中・外へも動かせる）
+  const rowSort = useLongPressSort((from, to, after) => setForm((f) => ({ ...f, rows: moveKeyTo(f.rows, from, to, after) })));
+  const stepSort = useLongPressSort((from, to, after) => setForm((f) => ({ ...f, steps: moveKeyTo(f.steps, from, to, after) })));
 
   const pickPhoto = async (file: File | undefined) => {
     if (!file) return;
@@ -485,8 +488,15 @@ export function RecipeEditor({
         <h2 className="mb-2 font-semibold">作り方</h2>
         <ol className="space-y-2">
           {form.steps.map((s, i) => (
-            <li key={s.key} className="flex gap-2">
-              <span className="mt-1.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-accent text-xs font-bold text-accent-fg">{i + 1}</span>
+            <li
+              key={s.key}
+              ref={stepSort.register(s.key)}
+              className={`flex gap-2 rounded-lg ${stepSort.dragging === s.key ? "relative z-10 bg-surface shadow-lg ring-2 ring-accent" : ""}`}
+            >
+              <div className="flex shrink-0 flex-col items-center">
+                <span className="mt-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-accent text-xs font-bold text-accent-fg">{i + 1}</span>
+                <DragHandle label={`手順${i + 1}を並べ替え`} {...stepSort.handleProps(s.key)} />
+              </div>
               <div className="min-w-0 flex-1">
                 <textarea
                   value={s.body}
@@ -498,7 +508,7 @@ export function RecipeEditor({
                   className="w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-base"
                 />
                 <div className="flex justify-end">
-                  <RowButtons onUp={() => set("steps", moveIn(form.steps, i, -1))} onDown={() => set("steps", moveIn(form.steps, i, 1))} onDelete={() => set("steps", form.steps.filter((x) => x.key !== s.key))} />
+                  <DeleteButton onDelete={() => set("steps", form.steps.filter((x) => x.key !== s.key))} />
                 </div>
               </div>
             </li>
@@ -585,19 +595,25 @@ export function RecipeEditor({
   );
 }
 
-function RowButtons({ onUp, onDown, onDelete }: { onUp: () => void; onDown: () => void; onDelete: () => void }) {
-  const cls = "rounded px-1.5 py-0.5 text-sm text-muted";
+function DeleteButton({ onDelete }: { onDelete: () => void }) {
   return (
-    <span className="flex shrink-0 items-center">
-      <button type="button" aria-label="上へ" onClick={onUp} className={cls}>
-        ↑
-      </button>
-      <button type="button" aria-label="下へ" onClick={onDown} className={cls}>
-        ↓
-      </button>
-      <button type="button" aria-label="削除" onClick={onDelete} className={cls}>
-        ×
-      </button>
-    </span>
+    <button type="button" aria-label="削除" onClick={onDelete} className="rounded px-2 py-0.5 text-sm text-muted">
+      ×
+    </button>
+  );
+}
+
+/** 並べ替えのつまみ（長押しで持ち上げて上下に動かす） */
+function DragHandle({ label, ...props }: { label: string } & ReturnType<ReturnType<typeof useLongPressSort>["handleProps"]>) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title="長押しして上下に動かすと並べ替えられます"
+      {...props}
+      className="flex h-9 w-6 shrink-0 cursor-grab select-none items-center justify-center text-lg text-muted active:cursor-grabbing"
+    >
+      ⠿
+    </button>
   );
 }
