@@ -9,7 +9,7 @@ import { scaleAmount } from "@/lib/cook/amount";
 import { alternativeGroups } from "@/lib/cook/alternatives";
 import type { RecipeIngredient } from "@/lib/cook/queries";
 
-export type ShoppingHints = { inPantry: string[]; staples: string[]; inList: string[] };
+export type ShoppingHints = { inPantry: string[]; staples: string[]; seasonings: string[]; inList: string[] };
 
 /**
  * 材料一覧。「− N人分 ＋」で分量を換算して表示する（保存はしない。D18）。
@@ -106,7 +106,7 @@ export function IngredientList({
   );
 }
 
-/** 買う材料を選ぶ。家にある・いつもある・もうリストにある材料は最初からチェックを外す */
+/** 買う材料を選ぶ。家にある・いつもある・調味料・もうリストにある材料は最初からチェックを外す */
 function ShoppingPicker({
   recipeId,
   ingredients,
@@ -126,6 +126,8 @@ function ShoppingPicker({
     if (hints.inList.includes(ing.ingredientId)) return "リストにある";
     if (hints.inPantry.includes(ing.ingredientId)) return "家にある";
     if (hints.staples.includes(ing.ingredientId)) return "いつもある";
+    // 調味料は家にあることが多いので、最初はチェックを外す（必要なら選べる）
+    if (hints.seasonings.includes(ing.ingredientId)) return "調味料";
     return null;
   };
   // 「または」のまとまりは1つだけ選ぶ。どれかが家にある・いつもある・リストにある、または全部なくても可なら選ばない

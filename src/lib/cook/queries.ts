@@ -320,12 +320,13 @@ export async function listShoppingItems(): Promise<ShoppingItem[]> {
   }));
 }
 
-/** レシピから買い物リストに入れるときに、最初からチェックを外しておく食材（家にある・いつもある・もうリストにある） */
-export async function shoppingHints(): Promise<{ inPantry: string[]; staples: string[]; inList: string[] }> {
+/** レシピから買い物リストに入れるときに、最初からチェックを外しておく食材（家にある・いつもある・調味料・もうリストにある） */
+export async function shoppingHints(): Promise<{ inPantry: string[]; staples: string[]; seasonings: string[]; inList: string[] }> {
   const supabase = await createClient();
-  const [pantry, staples, list] = await Promise.all([
+  const [pantry, staples, seasonings, list] = await Promise.all([
     supabase.from("pantry_items").select("ingredient_id").not("ingredient_id", "is", null),
     supabase.rpc("my_staple_ids"),
+    supabase.from("ingredients").select("id").eq("category", "調味料"),
     supabase.from("shopping_items").select("ingredient_id").is("bought_at", null).not("ingredient_id", "is", null),
   ]);
   const ids = (rows: { ingredient_id?: unknown; id?: unknown }[] | null, col: "ingredient_id" | "id") =>
@@ -333,6 +334,7 @@ export async function shoppingHints(): Promise<{ inPantry: string[]; staples: st
   return {
     inPantry: ids(pantry.data, "ingredient_id"),
     staples: uuidList(staples.data),
+    seasonings: ids(seasonings.data, "id"),
     inList: ids(list.data, "ingredient_id"),
   };
 }
