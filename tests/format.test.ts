@@ -62,7 +62,7 @@ test("CondoCook の通知はレシピへ", () => {
   assert.equal(f.sub, "何人分？");
   assert.equal(f.href, `/cook/r/${sid}#comments`);
   assert.equal(formatNotification(n("cook_cooked", { recipe_id: sid, title: "親子丼", excerpt: "" })).sub, undefined, "一言なし");
-  assert.equal(formatNotification(n("cook_new_recipe", {})).href, "/cook");
+  assert.equal(formatNotification(n("cook_new_recipe", {})).href, "/cook/recipes");
 });
 
 test("買い物リストの通知はまとめて1回", () => {

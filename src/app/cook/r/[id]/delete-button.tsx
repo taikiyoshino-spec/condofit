@@ -15,7 +15,7 @@ export function DeleteRecipeButton({ recipeId, title }: { recipeId: string; titl
       const r = await deleteRecipeAction(recipeId);
       if (!r.ok) return showToast(r.error ?? "削除できませんでした");
       showToast("レシピを削除しました");
-      router.push("/cook");
+      router.push("/cook/recipes");
     });
   return (
     <>

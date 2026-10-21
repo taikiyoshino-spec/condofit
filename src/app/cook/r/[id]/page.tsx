@@ -36,7 +36,7 @@ export default async function RecipePage({ params, searchParams }: PageProps<"/c
 
   return (
     <article className="pb-24">
-      <PageHeader title="レシピ" back="/cook" />
+      <PageHeader title="レシピ" back="/cook/recipes" />
       {recipe.photoPath && (
         // eslint-disable-next-line @next/next/no-img-element -- 認証付きの配信なので next/image の最適化は使わない
         <img

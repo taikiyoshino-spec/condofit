@@ -29,9 +29,9 @@ export default async function CookMyPage() {
   const me = profiles.find((p) => p.id === member.id);
   const visible = new Set(recipes.map((r) => r.id));
   const lists = [
-    { href: "/cook?scope=mine", label: "自分のレシピ", count: recipes.filter((r) => r.ownerId === member.id).length },
-    { href: "/cook?list=fav", label: "お気に入り", count: marks.favorites.filter((id) => visible.has(id)).length },
-    { href: "/cook?list=want", label: "作りたい", count: marks.wants.filter((id) => visible.has(id)).length },
+    { href: "/cook/recipes?scope=mine", label: "自分のレシピ", count: recipes.filter((r) => r.ownerId === member.id).length },
+    { href: "/cook/recipes?list=fav", label: "お気に入り", count: marks.favorites.filter((id) => visible.has(id)).length },
+    { href: "/cook/recipes?list=want", label: "作りたい", count: marks.wants.filter((id) => visible.has(id)).length },
     { href: "/cook/ranking", label: "ランキング", count: null },
   ];
   return (

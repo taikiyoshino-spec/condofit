@@ -16,7 +16,7 @@ const day = (v: unknown) => (typeof v === "string" ? formatDate(v, { withWeekday
 
 const title = (p: Record<string, unknown>) => (typeof p.title === "string" ? p.title : "レシピ");
 const excerpt = (p: Record<string, unknown>) => (typeof p.excerpt === "string" && p.excerpt ? p.excerpt : undefined);
-const recipeHref = (p: Record<string, unknown>) => (typeof p.recipe_id === "string" ? `/cook/r/${p.recipe_id}` : "/cook");
+const recipeHref = (p: Record<string, unknown>) => (typeof p.recipe_id === "string" ? `/cook/r/${p.recipe_id}` : "/cook/recipes");
 
 /** 通知の表示文言と遷移先 */
 export function formatNotification(n: NotificationRow): { text: string; sub?: string; href: string } {
