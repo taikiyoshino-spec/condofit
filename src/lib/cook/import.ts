@@ -11,13 +11,29 @@ export type ImportedRecipe = {
   steps: string[];
 };
 
-const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
+const ENTITIES: Record<string, string> = {
+  amp: "&",
+  lt: "<",
+  gt: ">",
+  quot: '"',
+  apos: "'",
+  nbsp: " ",
+  mdash: "—",
+  ndash: "–",
+  hellip: "…",
+  middot: "・",
+  times: "×",
+};
+
+/** タグの中身（属性の値に「>」があっても、引用符の中は1つの値として読む） */
+const TAG_BODY = String.raw`(?:[^>"']|"[^"]*"|'[^']*')*`;
+const ANY_TAG = new RegExp(`<${TAG_BODY}>`, "g");
 
 /** HTMLのタグと文字参照を外したテキスト */
 export function htmlToText(s: string): string {
   return s
     .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<[^>]*>/g, "")
+    .replace(ANY_TAG, "")
     .replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e: string) => {
       if (e[0] === "#") {
         const code = e[1] === "x" || e[1] === "X" ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
@@ -161,6 +177,65 @@ export function siteName(html: string): string | null {
 export function pageText(html: string, maxChars = 12000): string {
   const body = html
     .replace(/<(script|style|noscript|svg|header|footer|nav)[\s\S]*?<\/\1>/gi, " ")
-    .replace(/<(p|div|li|br|h\d|tr)[^>]*>/gi, "\n");
+    .replace(new RegExp(`<(p|div|li|br|h\\d|tr)\\b${TAG_BODY}>`, "gi"), "\n");
   return htmlToText(body).replace(/\n\s*\n+/g, "\n").slice(0, maxChars);
+}
+
+/** ページの題名（og:title か <title>。「 - サイト名」「 | サイト名」は外す） */
+export function pageTitle(html: string): string | null {
+  const m =
+    html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i) ??
+    html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["']/i) ??
+    html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  if (!m) return null;
+  const title = htmlToText(m[1]).split(/\s+[-|｜–—]\s+/)[0].trim();
+  return title ? title.slice(0, 60) : null;
+}
+
+const SECTION_OPEN = String.raw`^[\s【［\[■□◆◇●○◎★☆<＜《]*`;
+const SECTION_CLOSE = String.raw`[】］\]>＞》]?[\s:：]*$`;
+const INGREDIENTS_HEAD = new RegExp(`${SECTION_OPEN}(?:材料|食材)${String.raw`\s*`}(?:[（(]([^）)]*)[）)])?${SECTION_CLOSE}`);
+const STEPS_HEAD = new RegExp(`${SECTION_OPEN}(?:作り方|つくり方|手順|調理方法)${SECTION_CLOSE}`);
+// 作り方の終わり（動画・ポイント・コツなどの案内や、別の見出し）
+const STEPS_END = /^[\s]*(?:[▼▽]|【|■|◆|●|★|※|ポイント|コツ|動画|詳しい作り方|お気に入り|最新情報|コメント)/;
+
+/**
+ * 構造化データのないブログ形式のページ（「【材料】」「【作り方】」の見出しの下に1行ずつ書いたもの）を読み取る。
+ * AIが使えない・読み取れなかったときの代わり。材料が2つ以上読めなければ null
+ */
+export function extractRecipeFromText(text: string, title: string | null): ImportedRecipe | null {
+  const lines = text.split(/\n/).map((l) => l.trim()).filter(Boolean);
+  const start = lines.findIndex((l) => INGREDIENTS_HEAD.test(l));
+  if (start < 0) return null;
+  const servings = parseYield(lines[start].match(INGREDIENTS_HEAD)?.[1]);
+  const stepsAt = lines.findIndex((l, i) => i > start && STEPS_HEAD.test(l));
+  const ingredientLines = lines
+    .slice(start + 1, stepsAt > 0 ? stepsAt : start + 40)
+    // 「（麺を焼く際と…）」のような補足の行は材料にしない
+    .filter((l) => !/^[（(].*[）)]$/.test(l));
+  const ingredients = toIngredients(ingredientLines).filter((i) => i.name);
+  if (ingredients.filter((i) => i.amount).length < 2) return null;
+
+  const steps: string[] = [];
+  if (stepsAt > 0) {
+    let current = "";
+    for (const line of lines.slice(stepsAt + 1)) {
+      if (STEPS_END.test(line) || steps.length >= 30) break;
+      const body = line.replace(/^(?:\d+[.．)）、]|[①-⑳])\s*/, "");
+      current += body;
+      // 読点や助詞で終わる行は、次の行に続く文として1つの手順にまとめる
+      if (/[、，をはにでとがもやのへ]$/.test(body)) continue;
+      steps.push(current.slice(0, 500));
+      current = "";
+    }
+    if (current) steps.push(current.slice(0, 500));
+  }
+  return {
+    title: title ?? "取り込んだレシピ",
+    servings,
+    cookMinutes: null,
+    sourceName: null,
+    ingredients: ingredients.slice(0, 60),
+    steps,
+  };
 }

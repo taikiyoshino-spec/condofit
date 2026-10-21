@@ -6,6 +6,9 @@ import { NewRecipe } from "./new-recipe";
 
 const UUID_RE = /^[0-9a-f-]{36}$/i;
 
+// URLからの取り込み（ページの取得＋AI）に時間がかかることがあるので、この画面の処理の上限を延ばす
+export const maxDuration = 60;
+
 /** レシピの登録（URLから取り込み・手入力）。?copy=<id> で見えるレシピをコピーしてアレンジ */
 export default async function NewRecipePage({ searchParams }: PageProps<"/cook/new">) {
   const { copy } = await searchParams;

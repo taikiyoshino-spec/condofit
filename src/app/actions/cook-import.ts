@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { aiAvailable } from "@/lib/ai/gemini";
 import { aiExtractRecipe, aiMatchIngredients } from "@/lib/cook/ai";
 import { fetchRecipePage } from "@/lib/cook/fetch-page";
-import { extractRecipeFromHtml, pageText, siteName, type ImportedRecipe } from "@/lib/cook/import";
+import { extractRecipeFromHtml, extractRecipeFromText, pageText, pageTitle, siteName, type ImportedRecipe } from "@/lib/cook/import";
 import { INGREDIENT_CATEGORIES, cleanReading, matchIngredient, type IngredientCategory } from "@/lib/cook/ingredients";
 import { listIngredients, type IngredientOption } from "@/lib/cook/queries";
 
@@ -28,6 +28,11 @@ export async function importRecipeAction(url: string): Promise<ImportResult> {
   if (!recipe && aiAvailable()) {
     recipe = await aiExtractRecipe(pageText(page.html), siteName(page.html));
     usedAi = Boolean(recipe);
+  }
+  // AIが使えない・読み取れなかったときは、「【材料】」「【作り方】」の見出しで書かれたブログ形式として読む
+  if (!recipe) {
+    const fromText = extractRecipeFromText(pageText(page.html, 100000), pageTitle(page.html));
+    if (fromText) recipe = { ...fromText, sourceName: siteName(page.html) };
   }
   if (!recipe) {
     return {

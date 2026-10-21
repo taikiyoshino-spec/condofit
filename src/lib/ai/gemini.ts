@@ -4,7 +4,7 @@ import "server-only";
 // 無料枠では送った内容が提供元の改善に使われることがあるため、送るのはレシピ・食材名など公開情報だけにする
 
 const DEFAULT_MODEL = "gemini-2.5-flash";
-const TIMEOUT_MS = 20000;
+const TIMEOUT_MS = 40000;
 
 export function aiAvailable(): boolean {
   return Boolean(process.env.GEMINI_API_KEY);
@@ -21,12 +21,19 @@ export async function geminiJson<T>(prompt: string, schema: object): Promise<T |
       headers: { "Content-Type": "application/json", "x-goog-api-key": key },
       body: JSON.stringify({
         contents: [{ role: "user", parts: [{ text: prompt }] }],
-        generationConfig: { responseMimeType: "application/json", responseSchema: schema, temperature: 0.1 },
+        generationConfig: {
+          responseMimeType: "application/json",
+          responseSchema: schema,
+          temperature: 0.1,
+          // 読み取り・当てはめには「考える」時間は要らない（速く答えてもらい、時間切れを防ぐ）
+          thinkingConfig: { thinkingBudget: 0 },
+        },
       }),
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
     if (!res.ok) {
-      console.error("gemini failed", res.status);
+      // 原因を Vercel のログで追えるように、エラーの先頭だけ残す（キーや本文は出さない）
+      console.error("gemini failed", res.status, (await res.text().catch(() => "")).slice(0, 300));
       return null;
     }
     const data = (await res.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };

@@ -1,6 +1,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { extractRecipeFromHtml, htmlToText, pageText, parseIsoMinutes, parseYield, splitIngredientLine, toIngredients } from "../src/lib/cook/import.ts";
+import {
+  extractRecipeFromHtml,
+  extractRecipeFromText,
+  htmlToText,
+  pageText,
+  pageTitle,
+  parseIsoMinutes,
+  parseYield,
+  splitIngredientLine,
+  toIngredients,
+} from "../src/lib/cook/import.ts";
 
 const page = (ld: unknown, extra = "") =>
   `<html><head><meta property="og:site_name" content="サンプルレシピ">${extra}<script type="application/ld+json">${JSON.stringify(ld)}</script></head><body>本文</body></html>`;
@@ -74,4 +84,49 @@ test("parseIsoMinutes / parseYield / htmlToText / pageText", () => {
   assert.equal(parseYield("たくさん"), null);
   assert.equal(htmlToText("<b>A</b>&#x3042;&#12354;&nbsp;"), "Aああ");
   assert.equal(pageText("<script>x()</script><p>材料</p><p>手順</p>"), "材料\n手順");
+});
+
+test("htmlToText / pageText: 属性の値に「>」があるタグも外す（広告のコードを本文に残さない）", () => {
+  const html = "<div data-selector='body > div:eq(2)' data-code='PGRpdj4='>本文</div><p>材料</p>";
+  assert.equal(htmlToText(html), "本文材料");
+  assert.equal(pageText(html), "本文\n材料");
+  assert.equal(htmlToText("A&mdash;B&hellip;"), "A—B…");
+});
+
+test("pageTitle: サイト名を外す", () => {
+  assert.equal(pageTitle("<title>至高の焼きそば - 料理研究家リュウジのバズレシピ.com</title>"), "至高の焼きそば");
+  assert.equal(pageTitle('<meta property="og:title" content="【簡単】親子丼 | うちのごはん">'), "【簡単】親子丼");
+  assert.equal(pageTitle("<p>題名なし</p>"), null);
+});
+
+test("extractRecipeFromText: 「【材料】」「【作り方】」のブログ形式", () => {
+  const text = [
+    "至高の焼きそば",
+    "レシピはこちら！",
+    "【材料（2人分）】",
+    "焼きそば麺…1袋（150gのもの）",
+    "豚バラ肉…80g",
+    "キャベツ…1／8個",
+    "（麺を焼く際と野菜を炒める際、2回に分けて使います）",
+    "■タレ",
+    "ウスターソース…大さじ1",
+    "【作り方】",
+    "1. 麺は予め",
+    "油小2で両面焼いておく",
+    "豚肉、キャベツを焼き、",
+    "麺とソースを入れる",
+    "▼詳しい作り方は動画をご覧ください。",
+    "関係ない文章",
+  ].join("\n");
+  const r = extractRecipeFromText(text, "至高の焼きそば")!;
+  assert.equal(r.servings, 2);
+  assert.deepEqual(r.ingredients.map((i) => [i.name, i.amount, i.section]), [
+    ["焼きそば麺", "1袋（150gのもの）", null],
+    ["豚バラ肉", "80g", null],
+    ["キャベツ", "1／8個", null],
+    ["ウスターソース", "大さじ1", "タレ"],
+  ]);
+  assert.deepEqual(r.steps, ["麺は予め", "油小2で両面焼いておく", "豚肉、キャベツを焼き、麺とソースを入れる"], "読点で終わる行は次の行とまとめる。▼から先は読まない");
+  assert.equal(extractRecipeFromText("材料\n塩", null), null, "分量のある材料が2つ未満なら読まない");
+  assert.equal(extractRecipeFromText("今日のごはん\nおいしかった", null), null);
 });
