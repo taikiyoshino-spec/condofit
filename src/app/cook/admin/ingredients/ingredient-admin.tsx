@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { mergeIngredientAction, updateIngredientAction, type IngredientPatch } from "@/app/actions/cook-admin";
 import { BottomSheet } from "@/components/bottom-sheet";
+import { NeedMark } from "@/components/form";
 import { useProfile } from "@/components/avatar";
 import { showToast } from "@/components/toaster";
 import { INGREDIENT_CATEGORIES, searchIngredients, type IngredientCategory } from "@/lib/cook/ingredients";
@@ -137,15 +138,24 @@ function IngredientForm({ ingredient, all, onDone }: { ingredient: AdminIngredie
         <p className="text-xs text-muted">{addedBy?.displayName ?? "メンバー"}さんがレシピの登録中に追加した食材です。</p>
       )}
       <label className="block space-y-1">
-        <span className="text-sm font-medium">食材名</span>
+        <span className="text-sm font-medium">
+          食材名
+          <NeedMark need="required" />
+        </span>
         <input value={value.name} onChange={(e) => setValue({ ...value, name: e.target.value })} maxLength={30} className={input} />
       </label>
       <label className="block space-y-1">
-        <span className="text-sm font-medium">よみ（ひらがな）</span>
+        <span className="text-sm font-medium">
+          よみ（ひらがな）
+          <NeedMark need="optional" />
+        </span>
         <input value={value.reading} onChange={(e) => setValue({ ...value, reading: e.target.value })} maxLength={60} className={input} />
       </label>
       <label className="block space-y-1">
-        <span className="text-sm font-medium">別名（「、」区切り）</span>
+        <span className="text-sm font-medium">
+          別名（「、」区切り）
+          <NeedMark need="optional" />
+        </span>
         <input
           value={value.aliases}
           onChange={(e) => setValue({ ...value, aliases: e.target.value })}

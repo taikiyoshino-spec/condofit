@@ -3,6 +3,15 @@
 import { useFormStatus } from "react-dom";
 import type { ComponentProps, ReactNode } from "react";
 
+/** 入力欄の名前の横に付ける「必須」「任意」の印（必須と任意が混ざるフォームで使う） */
+export function NeedMark({ need }: { need: "required" | "optional" }) {
+  return need === "required" ? (
+    <span className="ml-1.5 rounded bg-accent px-1.5 py-px align-middle text-[10px] font-bold text-accent-fg">必須</span>
+  ) : (
+    <span className="ml-1.5 rounded border border-border px-1.5 py-px align-middle text-[10px] text-muted">任意</span>
+  );
+}
+
 export function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return (
     <label className="block space-y-1">

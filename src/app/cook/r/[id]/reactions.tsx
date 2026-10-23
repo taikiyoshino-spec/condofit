@@ -11,6 +11,7 @@ import {
   toggleRecipeMarkAction,
 } from "@/app/actions/cook-reactions";
 import { BottomSheet } from "@/components/bottom-sheet";
+import { NeedMark } from "@/components/form";
 import { showToast } from "@/components/toaster";
 import { RelativeTime } from "@/app/(app)/relative-time";
 import { resizeToJpeg } from "@/lib/client/resize-image";
@@ -139,7 +140,10 @@ function CookForm({ recipeId, pantryUsed, onDone }: { recipeId: string; pantryUs
   return (
     <div className="space-y-3">
       <label className="block space-y-1">
-        <span className="text-sm font-medium">ひとこと（任意）</span>
+        <span className="text-sm font-medium">
+          ひとこと
+          <NeedMark need="optional" />
+        </span>
         <textarea
           value={note}
           onChange={(e) => setNote(e.target.value)}
@@ -157,7 +161,8 @@ function CookForm({ recipeId, pantryUsed, onDone }: { recipeId: string; pantryUs
           <img src={photo.preview} alt="" className="h-16 w-16 rounded-lg object-cover" />
         )}
         <label className="cursor-pointer rounded-lg border border-border px-3 py-2 text-sm">
-          {photo ? "写真を変える" : "写真を付ける（任意）"}
+          {photo ? "写真を変える" : "写真を付ける"}
+          {!photo && <NeedMark need="optional" />}
           <input type="file" accept="image/*" className="sr-only" onChange={(e) => void pick(e.target.files?.[0])} />
         </label>
         {photo && (

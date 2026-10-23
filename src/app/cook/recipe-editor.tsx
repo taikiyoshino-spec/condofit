@@ -8,6 +8,7 @@ import { addIngredientAction, type ImportDraft } from "@/app/actions/cook-import
 import { BottomSheet } from "@/components/bottom-sheet";
 import { showToast } from "@/components/toaster";
 import { resizeToJpeg } from "@/lib/client/resize-image";
+import { NeedMark } from "@/components/form";
 import { KIDS_TAG } from "@/lib/cook/filter";
 import { moveKeyTo } from "@/lib/client/sort";
 import { useLongPressSort } from "@/lib/client/use-long-press-sort";
@@ -216,8 +217,8 @@ export function RecipeEditor({
           value={r.amount}
           onChange={(e) => setRow(r.key, { amount: e.target.value })}
           maxLength={30}
-          placeholder="分量"
-          aria-label="分量"
+          placeholder="分量（任意）"
+          aria-label="分量（任意）"
           className="min-w-0 flex-[2] rounded-lg border border-border bg-surface px-2 py-1.5 text-base"
         />
       </div>
@@ -370,12 +371,18 @@ export function RecipeEditor({
 
       <section className="mx-4 space-y-3 rounded-xl border border-border bg-surface p-4">
         <label className="block space-y-1">
-          <span className="text-sm font-medium">料理名</span>
+          <span className="text-sm font-medium">
+            料理名
+            <NeedMark need="required" />
+          </span>
           <input value={form.title} onChange={(e) => set("title", e.target.value)} maxLength={60} className={input} placeholder="例：親子丼" />
         </label>
 
         <div className="space-y-1">
-          <span className="text-sm font-medium">完成写真（自分で撮ったもの）</span>
+          <span className="block text-sm font-medium">
+            完成写真（自分で撮ったもの）
+            <NeedMark need="optional" />
+          </span>
           {currentPhoto ? (
             <div className="relative">
               {/* eslint-disable-next-line @next/next/no-img-element -- 端末内のプレビュー・認証付きの配信 */}
@@ -429,15 +436,24 @@ export function RecipeEditor({
 
         <div className="grid grid-cols-3 gap-2">
           <label className="block space-y-1">
-            <span className="text-sm font-medium">何人分</span>
+            <span className="text-sm font-medium">
+              何人分
+              <NeedMark need="optional" />
+            </span>
             <input value={form.servings} onChange={(e) => set("servings", e.target.value.replace(/\D/g, ""))} inputMode="numeric" className={input} placeholder="2" />
           </label>
           <label className="block space-y-1">
-            <span className="text-sm font-medium">時間（分）</span>
+            <span className="text-sm font-medium">
+              時間（分）
+              <NeedMark need="optional" />
+            </span>
             <input value={form.cookMinutes} onChange={(e) => set("cookMinutes", e.target.value.replace(/\D/g, ""))} inputMode="numeric" className={input} placeholder="20" />
           </label>
           <label className="block space-y-1">
-            <span className="text-sm font-medium">カテゴリ</span>
+            <span className="text-sm font-medium">
+              カテゴリ
+              <NeedMark need="optional" />
+            </span>
             <select value={form.categoryId} onChange={(e) => set("categoryId", e.target.value)} className={`${input} px-2`}>
               <option value="">—</option>
               {categories.map((c) => (
@@ -460,14 +476,22 @@ export function RecipeEditor({
           </span>
         </label>
         <label className="block space-y-1">
-          <span className="text-sm font-medium">タグ（「、」区切り）</span>
+          <span className="text-sm font-medium">
+            タグ（「、」区切り）
+            <NeedMark need="optional" />
+          </span>
           <input value={form.tags} onChange={(e) => set("tags", e.target.value)} className={input} placeholder="例：簡単、作り置き" />
         </label>
       </section>
 
       <section className="mx-4 rounded-xl border border-border bg-surface p-4">
-        <h2 className="mb-1 font-semibold">材料</h2>
-        <p className="mb-2 text-xs text-muted">分量は「200g」「大さじ2」「少々」のように。何人分を入れると、見る人の人数に合わせて換算されます。</p>
+        <h2 className="mb-1 font-semibold">
+          材料
+          <NeedMark need="required" />
+        </h2>
+        <p className="mb-2 text-xs text-muted">
+          1つ以上入れてください。分量は入れなくても登録できます（「200g」「大さじ2」「少々」のように）。何人分を入れると、見る人の人数に合わせて換算されます。
+        </p>
         <div className="space-y-3">
           {editorBlocks(form.rows).map((b) =>
             b.heading ? (
@@ -578,7 +602,11 @@ export function RecipeEditor({
       </section>
 
       <section className="mx-4 rounded-xl border border-border bg-surface p-4">
-        <h2 className="mb-2 font-semibold">作り方</h2>
+        <h2 className="mb-1 font-semibold">
+          作り方
+          <NeedMark need="required" />
+        </h2>
+        <p className="mb-2 text-xs text-muted">1つ以上入れてください。</p>
         <ol className="space-y-2">
           {form.steps.map((s, i) => (
             <li
@@ -615,16 +643,25 @@ export function RecipeEditor({
 
       <section className="mx-4 space-y-3 rounded-xl border border-border bg-surface p-4">
         <label className="block space-y-1">
-          <span className="text-sm font-medium">メモ・コツ（仲間へのひとことも）</span>
+          <span className="text-sm font-medium">
+            メモ・コツ（仲間へのひとことも）
+            <NeedMark need="optional" />
+          </span>
           <textarea value={form.memo} onChange={(e) => set("memo", e.target.value)} rows={3} maxLength={1000} className={input} />
         </label>
         <label className="block space-y-1">
-          <span className="text-sm font-medium">元のレシピのURL（あれば）</span>
+          <span className="text-sm font-medium">
+            元のレシピのURL
+            <NeedMark need="optional" />
+          </span>
           <input value={form.sourceUrl} onChange={(e) => set("sourceUrl", e.target.value)} inputMode="url" className={input} placeholder="https://" />
         </label>
         {form.sourceUrl && (
           <label className="block space-y-1">
-            <span className="text-sm font-medium">サイト名・出典</span>
+            <span className="text-sm font-medium">
+              サイト名・出典
+              <NeedMark need="optional" />
+            </span>
             <input value={form.sourceName} onChange={(e) => set("sourceName", e.target.value)} maxLength={60} className={input} />
           </label>
         )}
@@ -635,11 +672,17 @@ export function RecipeEditor({
           <div className="space-y-3">
             <p className="text-xs text-muted">仲間みんなで使う食材の一覧に追加します。あとで食材の管理や買い物リストで使います。</p>
             <label className="block space-y-1">
-              <span className="text-sm font-medium">食材名</span>
+              <span className="text-sm font-medium">
+                食材名
+                <NeedMark need="required" />
+              </span>
               <input value={adding.name} onChange={(e) => setAdding({ ...adding, name: e.target.value })} maxLength={30} className={input} />
             </label>
             <label className="block space-y-1">
-              <span className="text-sm font-medium">よみ（ひらがな・任意）</span>
+              <span className="text-sm font-medium">
+                よみ（ひらがな）
+                <NeedMark need="optional" />
+              </span>
               <input value={adding.reading} onChange={(e) => setAdding({ ...adding, reading: e.target.value })} maxLength={60} className={input} placeholder="例：けーる" />
             </label>
             <label className="block space-y-1">

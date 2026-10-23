@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { addPantryItemsAction, removePantryItemsAction, setStapleAction, updatePantryItemAction } from "@/app/actions/cook-pantry";
 import { addShoppingItemsAction } from "@/app/actions/cook-shopping";
 import { BottomSheet } from "@/components/bottom-sheet";
+import { NeedMark } from "@/components/form";
 import { showToast } from "@/components/toaster";
 import { INGREDIENT_CATEGORIES } from "@/lib/cook/ingredients";
 import { expiryLabel, expiryStatus } from "@/lib/cook/pantry";
@@ -173,7 +174,10 @@ function PantryEditor({ item, today, onDone }: { item: PantryItem; today: string
         ))}
       </div>
       <label className="block space-y-1">
-        <span className="text-sm font-medium">期限の目安</span>
+        <span className="text-sm font-medium">
+          期限の目安
+          <NeedMark need="optional" />
+        </span>
         <input type="date" value={expires} onChange={(e) => setExpires(e.target.value)} className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-base" />
         <span className="block text-xs text-muted">冷蔵・冷凍を切り替えると、買った日から目安を計算し直します</span>
       </label>
