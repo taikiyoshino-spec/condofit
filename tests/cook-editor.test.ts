@@ -134,3 +134,10 @@ test("groupIntoSection: 選んだ材料を見出しにまとめる", async () =>
   assert.deepEqual(view(groupIntoSection(rows, [tsuyu.key], "A", next)), ["-:豚肉,しょうゆ,キャベツ,みりん", "A:めんつゆ"]);
   assert.equal(groupIntoSection(rows, [], "A", next), rows);
 });
+
+test("toggleTagText: チェックでタグを付け外し", async () => {
+  const { toggleTagText } = await import("../src/lib/cook/editor.ts");
+  assert.equal(toggleTagText("簡単, 作り置き", "子供向け", true), "簡単、作り置き、子供向け");
+  assert.equal(toggleTagText("簡単、子供向け", "子供向け", true), "簡単、子供向け", "二重に付けない");
+  assert.equal(toggleTagText("子供向け 簡単", "子供向け", false), "簡単");
+});

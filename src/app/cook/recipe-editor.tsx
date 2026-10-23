@@ -8,6 +8,7 @@ import { addIngredientAction, type ImportDraft } from "@/app/actions/cook-import
 import { BottomSheet } from "@/components/bottom-sheet";
 import { showToast } from "@/components/toaster";
 import { resizeToJpeg } from "@/lib/client/resize-image";
+import { KIDS_TAG } from "@/lib/cook/filter";
 import { moveKeyTo } from "@/lib/client/sort";
 import { useLongPressSort } from "@/lib/client/use-long-press-sort";
 import {
@@ -21,6 +22,7 @@ import {
   removeRow,
   removeSection,
   rowsToIngredients,
+  toggleTagText,
   type EditorItem,
   type EditorRow,
 } from "@/lib/cook/editor";
@@ -446,6 +448,17 @@ export function RecipeEditor({
             </select>
           </label>
         </div>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={parseTags(form.tags).includes(KIDS_TAG)}
+            onChange={(e) => set("tags", toggleTagText(form.tags, KIDS_TAG, e.target.checked))}
+            className="h-5 w-5 accent-[var(--accent)]"
+          />
+          <span>
+            子供向け<span className="ml-1 text-xs text-muted">（子どもが食べやすい。一覧・提案で絞り込めます）</span>
+          </span>
+        </label>
         <label className="block space-y-1">
           <span className="text-sm font-medium">タグ（「、」区切り）</span>
           <input value={form.tags} onChange={(e) => set("tags", e.target.value)} className={input} placeholder="例：簡単、作り置き" />

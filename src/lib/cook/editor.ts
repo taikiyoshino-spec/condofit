@@ -193,3 +193,9 @@ export function groupIntoSection(rows: EditorRow[], keys: number[], target: numb
   }
   return [...rest, { key: nextKey(), kind: "heading", name: target.trim().slice(0, 20), isSection: true }, ...moving];
 }
+
+/** タグの入力欄の文字に、タグを足す・外す（「、」区切りに整える） */
+export function toggleTagText(text: string, tag: string, on: boolean): string {
+  const tags = parseTags(text).filter((t) => t !== tag);
+  return (on ? [...tags, tag] : tags).join("、");
+}

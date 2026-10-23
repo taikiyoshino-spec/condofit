@@ -37,3 +37,13 @@ test("filterRecipes: お気に入り・作りたいの一覧（onlyIds）", () =
   assert.deepEqual(filterRecipes(rows, { ...opt, onlyIds: [] }), []);
   assert.equal(filterRecipes(rows, opt).length, 2);
 });
+
+test("filterRecipes: 子供向けだけ", () => {
+  const rows = [
+    { id: "a", title: "カレー", ownerId: "me", categoryId: null, tags: ["子供向け"], ingredientNames: [] },
+    { id: "b", title: "麻婆豆腐", ownerId: "me", categoryId: null, tags: ["辛い"], ingredientNames: [] },
+  ];
+  const opt = { scope: "all" as const, q: "", categoryId: null, myId: "me", householdIds: ["me"] };
+  assert.deepEqual(filterRecipes(rows, { ...opt, kids: true }).map((r) => r.id), ["a"]);
+  assert.equal(filterRecipes(rows, opt).length, 2);
+});

@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { RecipeSummary } from "@/lib/cook/queries";
 import { RecipeThumb } from "./recipe-thumb";
 import { Owner } from "./owner";
+import { isKidsRecipe } from "@/lib/cook/filter";
 
 const VISIBILITY_LABEL = { group: null, household: "家族だけ", private: "自分だけ" } as const;
 
@@ -14,6 +15,7 @@ export function RecipeListItem({ recipe, categoryName }: { recipe: RecipeSummary
         <span className="block truncate font-semibold">{recipe.title}</span>
         <Owner userId={recipe.ownerId} className="mt-0.5 text-xs text-muted" />
         <span className="mt-1 flex flex-wrap gap-x-2 text-xs text-muted">
+          {isKidsRecipe(recipe) && <span className="font-medium text-accent">子供向け</span>}
           {categoryName && <span>{categoryName}</span>}
           {recipe.cookMinutes && <span>{recipe.cookMinutes}分</span>}
           {recipe.cookedCount > 0 && <span>作った {recipe.cookedCount}</span>}

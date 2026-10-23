@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireCookUser } from "@/lib/auth/session";
 import { listCategories, listPantry, listRecipes, myStapleIds, recentHouseholdCookIds } from "@/lib/cook/queries";
 import { suggestRecipes } from "@/lib/cook/pantry";
+import { isKidsRecipe } from "@/lib/cook/filter";
 import { todayJst } from "@/lib/date";
 import { PageHeader } from "@/components/page";
 import { RecipeThumb } from "../recipe-thumb";
@@ -11,8 +12,16 @@ const LIMIT = 50;
 
 /** 今ある食材で作れるレシピ（D17） */
 export default async function SuggestPage({ searchParams }: PageProps<"/cook/suggest">) {
-  const { cat } = await searchParams;
+  const { cat, kids: kidsParam } = await searchParams;
   const categoryId = typeof cat === "string" ? cat : null;
+  const kids = kidsParam === "1";
+  const href = (c: string | null, k: boolean) => {
+    const params = new URLSearchParams();
+    if (c) params.set("cat", c);
+    if (k) params.set("kids", "1");
+    const q = params.toString();
+    return q ? `/cook/suggest?${q}` : "/cook/suggest";
+  };
   const [, recipes, pantry, staples, recentIds, categories] = await Promise.all([
     requireCookUser(),
     listRecipes(),
@@ -23,7 +32,7 @@ export default async function SuggestPage({ searchParams }: PageProps<"/cook/sug
   ]);
   const today = todayJst();
   const suggestions = suggestRecipes(
-    recipes.filter((r) => !categoryId || r.categoryId === categoryId),
+    recipes.filter((r) => (!categoryId || r.categoryId === categoryId) && (!kids || isKidsRecipe(r))),
     { pantry, staples, recentIds, today },
   ).slice(0, LIMIT);
 
@@ -32,7 +41,14 @@ export default async function SuggestPage({ searchParams }: PageProps<"/cook/sug
       <PageHeader title="今日なに作る？" />
       <div className="mb-3 flex gap-1.5 overflow-x-auto px-4 pb-1 text-xs">
         <Link
-          href="/cook/suggest"
+          href={href(categoryId, !kids)}
+          aria-pressed={kids}
+          className={`shrink-0 rounded-full border px-3 py-1 ${kids ? "border-accent bg-accent text-accent-fg" : "border-accent text-accent"}`}
+        >
+          子供向け
+        </Link>
+        <Link
+          href={href(null, kids)}
           className={`shrink-0 rounded-full border px-3 py-1 ${!categoryId ? "border-accent bg-accent text-accent-fg" : "border-border"}`}
         >
           すべて
@@ -40,7 +56,7 @@ export default async function SuggestPage({ searchParams }: PageProps<"/cook/sug
         {categories.map((c) => (
           <Link
             key={c.id}
-            href={`/cook/suggest?cat=${c.id}`}
+            href={href(c.id, kids)}
             className={`shrink-0 rounded-full border px-3 py-1 ${categoryId === c.id ? "border-accent bg-accent text-accent-fg" : "border-border"}`}
           >
             {c.name}
@@ -83,6 +99,7 @@ export default async function SuggestPage({ searchParams }: PageProps<"/cook/sug
                     {recipe.cookedCount > 0 && <span>作った {recipe.cookedCount}</span>}
                     {recipe.favoriteCount > 0 && <span>♥ {recipe.favoriteCount}</span>}
                     {recent && <span>最近作った</span>}
+                    {isKidsRecipe(recipe) && <span className="font-medium text-accent">子供向け</span>}
                   </span>
                 </span>
               </Link>

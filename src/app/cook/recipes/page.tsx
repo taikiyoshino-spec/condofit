@@ -19,6 +19,7 @@ export default async function CookHomePage({ searchParams }: PageProps<"/cook/re
   const scope: Scope = sp.scope === "household" || sp.scope === "mine" ? sp.scope : "all";
   const q = typeof sp.q === "string" ? sp.q.slice(0, 50) : "";
   const categoryId = typeof sp.cat === "string" ? sp.cat : null;
+  const kids = sp.kids === "1";
   const mark = sp.list === "fav" || sp.list === "want" ? sp.list : null;
 
   const [member, recipes, categories, householdIds, marks] = await Promise.all([
@@ -29,12 +30,12 @@ export default async function CookHomePage({ searchParams }: PageProps<"/cook/re
     myRecipeMarks(),
   ]);
   const onlyIds = mark === "fav" ? marks.favorites : mark === "want" ? marks.wants : undefined;
-  const shown = filterRecipes(recipes, { scope, q, categoryId, myId: member.id, householdIds, onlyIds });
+  const shown = filterRecipes(recipes, { scope, q, categoryId, myId: member.id, householdIds, onlyIds, kids });
   const categoryNames = new Map(categories.map((c) => [c.id, c.name]));
 
   const href = (over: Record<string, string | null>) => {
     const params = new URLSearchParams();
-    const merged = { scope: scope === "all" ? null : scope, q: q || null, cat: categoryId, list: mark, ...over };
+    const merged = { scope: scope === "all" ? null : scope, q: q || null, cat: categoryId, list: mark, kids: kids ? "1" : null, ...over };
     for (const [k, v] of Object.entries(merged)) if (v) params.set(k, v);
     const s = params.toString();
     return s ? `/cook/recipes?${s}` : "/cook/recipes";
@@ -47,6 +48,7 @@ export default async function CookHomePage({ searchParams }: PageProps<"/cook/re
         {scope !== "all" && <input type="hidden" name="scope" value={scope} />}
         {categoryId && <input type="hidden" name="cat" value={categoryId} />}
         {mark && <input type="hidden" name="list" value={mark} />}
+        {kids && <input type="hidden" name="kids" value="1" />}
         <input
           type="search"
           name="q"
@@ -72,6 +74,13 @@ export default async function CookHomePage({ searchParams }: PageProps<"/cook/re
       </div>
 
       <div className="mb-3 flex gap-1.5 overflow-x-auto px-4 pb-1 text-xs">
+        <Link
+          href={href({ kids: kids ? null : "1" })}
+          aria-pressed={kids}
+          className={`shrink-0 rounded-full border px-3 py-1 ${kids ? "border-accent bg-accent text-accent-fg" : "border-accent text-accent"}`}
+        >
+          子供向け
+        </Link>
         <Link
           href={href({ cat: null })}
           className={`shrink-0 rounded-full border px-3 py-1 ${!categoryId ? "border-accent bg-accent text-accent-fg" : "border-border"}`}
