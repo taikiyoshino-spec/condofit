@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireCookUser } from "@/lib/auth/session";
-import { getRecipe, getRecipeReactions, listCategories, listPantry, myHouseholdSize, myStapleIds, shoppingHints } from "@/lib/cook/queries";
+import { getRecipe, getRecipeReactions, listCategories, listPantry, myHouseholdServings, myStapleIds, shoppingHints } from "@/lib/cook/queries";
 import { usedPantryItems } from "@/lib/cook/pantry";
 import { PageHeader } from "@/components/page";
 import { recipePhotoUrl } from "@/lib/cook/photo";
@@ -17,10 +17,10 @@ export default async function RecipePage({ params, searchParams }: PageProps<"/c
   const { id } = await params;
   if (!UUID_RE.test(id)) notFound();
   const member = await requireCookUser();
-  const [recipe, categories, householdSize, reactions, hints, pantry, staples] = await Promise.all([
+  const [recipe, categories, householdServings, reactions, hints, pantry, staples] = await Promise.all([
     getRecipe(id),
     listCategories(),
-    myHouseholdSize(),
+    myHouseholdServings(),
     getRecipeReactions(id, member.id),
     shoppingHints(),
     listPantry(),
@@ -95,7 +95,7 @@ export default async function RecipePage({ params, searchParams }: PageProps<"/c
         pantryUsed={pantryUsed}
       />
 
-      <IngredientList recipeId={recipe.id} ingredients={recipe.ingredients} servings={recipe.servings} initialServings={recipe.servings ? householdSize : null} hints={hints} />
+      <IngredientList recipeId={recipe.id} ingredients={recipe.ingredients} servings={recipe.servings} initialServings={recipe.servings ? householdServings : null} hints={hints} />
 
       <section className="mx-4 mb-4">
         <h2 className="mb-2 text-lg font-semibold">作り方</h2>

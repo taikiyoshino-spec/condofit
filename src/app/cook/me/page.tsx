@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { requireCookUser } from "@/lib/auth/session";
 import { listMemberProfiles } from "@/lib/members";
-import { listRecipes, myRecipeMarks } from "@/lib/cook/queries";
+import { listRecipes, myHouseholdServings, myRecipeMarks } from "@/lib/cook/queries";
+import { ServingsForm } from "./servings-form";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader, Section } from "@/components/page";
 import { logoutAction } from "@/app/actions/auth";
@@ -20,10 +21,11 @@ const NOTIFY_ITEMS = [
 export default async function CookMyPage() {
   const member = await requireCookUser();
   const supabase = await createClient();
-  const [profiles, recipes, marks, { data: settings }] = await Promise.all([
+  const [profiles, recipes, marks, servings, { data: settings }] = await Promise.all([
     listMemberProfiles(),
     listRecipes(),
     myRecipeMarks(),
+    myHouseholdServings(),
     supabase.from("notification_settings").select("cook_cooked, cook_reaction, cook_new_recipe, cook_shopping").eq("user_id", member.id).maybeSingle(),
   ]);
   const me = profiles.find((p) => p.id === member.id);
@@ -68,6 +70,12 @@ export default async function CookMyPage() {
           </span>
         </Link>
       )}
+      <Section title="家族のいつも作る人数">
+        <ServingsForm initial={servings} />
+        <p className="mt-2 text-xs text-muted">
+          レシピを開いたとき・作るモード・買い物リストに入れるときの分量は、この人数分から始まります（家族で共通）。
+        </p>
+      </Section>
       <Section title="写真">
         <AvatarForm userId={member.id} name={member.displayName} avatarPath={me?.avatarPath ?? null} />
         <p className="mt-3 text-xs text-muted">グループのメンバーにだけ表示されます。CondoFit と共通です。</p>

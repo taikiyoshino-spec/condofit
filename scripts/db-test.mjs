@@ -1044,4 +1044,16 @@ await test("レシピの材料: 「または」（直前の材料の代わり）
   );
 });
 
+await test("家族のいつも作る人数: 初期値3人・家族の誰でも変えられる", async () => {
+  const [{ servings }] = await asE("select h.servings from households h where h.id = my_household_id()");
+  assert.equal(servings, 3);
+  await as("C", "select set_household_servings(4)");
+  assert.equal((await asE("select h.servings from households h where h.id = my_household_id()"))[0].servings, 4, "家族（C と E）で共通");
+  assert.equal((await as("A", "select h.servings from households h where h.id = my_household_id()"))[0].servings, 3, "別の家族は変わらない");
+  await rejects(() => asE("select set_household_servings(0)"), /invalid/);
+  await rejects(() => asE("select set_household_servings(21)"), /invalid/);
+  await rejects(() => as("D", "select set_household_servings(2)"), /forbidden/);
+  await rejects(() => asE("update households set servings = 5"), /permission denied/);
+});
+
 console.log(`\n${passed} passed${process.exitCode ? ", some FAILED" : ""}`);

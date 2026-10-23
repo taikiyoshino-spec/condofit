@@ -184,10 +184,14 @@ export const myHouseholdMemberIds = cache(async (): Promise<string[]> => {
   return (data ?? []).filter((m) => m.household_id === mine).map((m) => m.user_id as string);
 });
 
-/** 自分の家族の人数（人数分の換算の初期値。D18） */
-export async function myHouseholdSize(): Promise<number> {
-  return Math.max(1, (await myHouseholdMemberIds()).length);
-}
+/** 自分の家族のいつも作る人数（レシピ画面・作るモード・買い物の分量の最初の人数。初期値3人） */
+export const myHouseholdServings = cache(async (): Promise<number> => {
+  const supabase = await createClient();
+  const { data: hid } = await supabase.rpc("my_household_id");
+  if (!hid) return 3;
+  const { data } = await supabase.from("households").select("servings").eq("id", hid as string).maybeSingle();
+  return (data?.servings as number | undefined) ?? 3;
+});
 
 export type IngredientOption = { id: string; name: string; reading: string; aliases: string[] };
 

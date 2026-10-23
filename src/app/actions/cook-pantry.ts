@@ -64,3 +64,14 @@ export async function setStapleAction(ingredientId: string, on: boolean): Promis
   refresh();
   return { ok: true };
 }
+
+/** 家族のいつも作る人数（レシピ画面・作るモード・買い物の分量の最初の人数） */
+export async function setHouseholdServingsAction(servings: number): Promise<PantryResult> {
+  await requireCookUser();
+  if (!Number.isInteger(servings) || servings < 1 || servings > 20) return { ok: false, error: "1〜20人で選んでください" };
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_household_servings", { p_servings: servings });
+  if (error) return { ok: false, error: "保存できませんでした" };
+  refresh();
+  return { ok: true };
+}

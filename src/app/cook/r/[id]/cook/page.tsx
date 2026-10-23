@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { requireCookUser } from "@/lib/auth/session";
-import { getRecipe, myHouseholdSize } from "@/lib/cook/queries";
+import { getRecipe, myHouseholdServings } from "@/lib/cook/queries";
 import { CookMode } from "./cook-mode";
 
 const UUID_RE = /^[0-9a-f-]{36}$/i;
@@ -9,10 +9,10 @@ const UUID_RE = /^[0-9a-f-]{36}$/i;
 export default async function CookModePage({ params, searchParams }: PageProps<"/cook/r/[id]/cook">) {
   const { id } = await params;
   if (!UUID_RE.test(id)) notFound();
-  const [, recipe, householdSize] = await Promise.all([requireCookUser(), getRecipe(id), myHouseholdSize()]);
+  const [, recipe, householdServings] = await Promise.all([requireCookUser(), getRecipe(id), myHouseholdServings()]);
   if (!recipe) notFound();
   const n = Number((await searchParams).n);
-  const people = recipe.servings ? (Number.isInteger(n) && n >= 1 && n <= 20 ? n : householdSize) : null;
+  const people = recipe.servings ? (Number.isInteger(n) && n >= 1 && n <= 20 ? n : householdServings) : null;
   const factor = recipe.servings && people ? people / recipe.servings : 1;
   return (
     <CookMode
