@@ -79,3 +79,25 @@ test("editorBlocks / appendLooseItem / removeSection: 見出しの中と外", as
   assert.deepEqual(view(removeSection(added, block.heading!.key)), ["-:豚肉,酒,キャベツ"], "見出しのない並びは1つにまとめて出す");
   assert.deepEqual(rowsToIngredients(removeSection(added, block.heading!.key)).map((i) => i.section), [null, null, null]);
 });
+
+test("insertAlternative / removeRow: 「または」の行を足す・消す", async () => {
+  const { insertAlternative, removeRow } = await import("../src/lib/cook/editor.ts");
+  let k = 0;
+  const item = (name: string, orPrevious = false) => ({ key: ++k, kind: "item" as const, ingredientId: null, name, amount: "", optional: false, orPrevious });
+  const cabbage = item("キャベツ");
+  const rows = [cabbage, item("カット野菜", true), item("豚肉")];
+  const added = insertAlternative(rows, cabbage.key, item("白菜"));
+  assert.deepEqual(added.map((r) => [r.name, r.kind === "item" && r.orPrevious]), [
+    ["キャベツ", false],
+    ["カット野菜", true],
+    ["白菜", true],
+    ["豚肉", false],
+  ], "まとまりの最後（カット野菜の下）に足す");
+  const removed = removeRow(added, cabbage.key);
+  assert.deepEqual(removed.map((r) => [r.name, r.kind === "item" && r.orPrevious]), [
+    ["カット野菜", false],
+    ["白菜", true],
+    ["豚肉", false],
+  ], "先頭を消すと次の材料が先頭になる");
+  assert.equal(removeRow(rows, 999), rows);
+});

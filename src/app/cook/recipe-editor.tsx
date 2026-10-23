@@ -15,7 +15,9 @@ import {
   editorBlocks,
   ingredientsToRows,
   insertAfter,
+  insertAlternative,
   parseTags,
+  removeRow,
   removeSection,
   rowsToIngredients,
   type EditorItem,
@@ -171,7 +173,7 @@ export function RecipeEditor({
       ref={rowSort.register(r.key)}
       className={`rounded-lg border p-2 ${canAlt(i) && r.orPrevious ? "-mt-1 ml-6" : ""} ${rowSort.dragging === r.key ? "relative z-10 border-accent bg-surface shadow-lg ring-2 ring-accent" : "border-border"}`}
     >
-      {canAlt(i) && r.orPrevious && <p className="mb-1 text-xs font-semibold text-accent">または（上の材料の代わり）</p>}
+      {canAlt(i) && r.orPrevious && <p className="mb-1 text-xs font-semibold text-accent">または</p>}
       <div className="flex items-center gap-1">
         <DragHandle label={`${r.name || "材料"}を並べ替え`} {...rowSort.handleProps(r.key)} />
         <div className="relative min-w-0 flex-[3]">
@@ -181,7 +183,7 @@ export function RecipeEditor({
             onFocus={() => setFocusedRow(r.key)}
             onBlur={() => setTimeout(() => setFocusedRow((k) => (k === r.key ? null : k)), 150)}
             maxLength={60}
-            placeholder="材料（例：とりもも）"
+            placeholder={canAlt(i) && r.orPrevious ? "代わりの材料（例：カット野菜）" : "材料（例：とりもも）"}
             aria-label="材料名"
             className="w-full rounded-lg border border-border bg-surface px-2 py-1.5 text-base"
           />
@@ -236,14 +238,15 @@ export function RecipeEditor({
             <input type="checkbox" checked={r.optional} onChange={(e) => setRow(r.key, { optional: e.target.checked })} />
             なくても可
           </label>
-          {canAlt(i) && (
-            <label className="flex items-center gap-1.5 text-xs text-muted">
-              <input type="checkbox" checked={Boolean(r.orPrevious)} onChange={(e) => setRow(r.key, { orPrevious: e.target.checked })} />
-              上の材料の代わり（または）
-            </label>
-          )}
+          <button
+            type="button"
+            onClick={() => set("rows", insertAlternative(form.rows, r.key, emptyItem()))}
+            className="rounded-full border border-accent px-2 py-0.5 text-xs text-accent"
+          >
+            ＋ または
+          </button>
         </div>
-        <DeleteButton onDelete={() => set("rows", form.rows.filter((x) => x.key !== r.key))} />
+        <DeleteButton onDelete={() => set("rows", removeRow(form.rows, r.key))} />
       </div>
     </li>
   );

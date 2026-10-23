@@ -128,3 +128,30 @@ export function appendLooseItem(rows: EditorRow[], item: EditorItem, nextKey: ()
 export function removeSection(rows: EditorRow[], headingKey: number): EditorRow[] {
   return rows.map((r) => (r.kind === "heading" && r.key === headingKey ? { ...r, name: "", isSection: false } : r));
 }
+
+// ---- 材料の「または」 ----
+
+/** key の材料の「または」のまとまりの最後に、代わりの材料（orPrevious）を足す */
+export function insertAlternative(rows: EditorRow[], key: number, item: EditorItem): EditorRow[] {
+  let end = rows.findIndex((r) => r.key === key);
+  if (end < 0) return rows;
+  while (end + 1 < rows.length) {
+    const next = rows[end + 1];
+    if (next.kind !== "item" || !next.orPrevious) break;
+    end++;
+  }
+  return insertAfter(rows, end, { ...item, orPrevious: true });
+}
+
+/** 行を消す。「または」のまとまりの先頭を消したときは、次の代わりの材料を先頭に繰り上げる（別の材料の「または」にならないように） */
+export function removeRow(rows: EditorRow[], key: number): EditorRow[] {
+  const i = rows.findIndex((r) => r.key === key);
+  if (i < 0) return rows;
+  const removed = rows[i];
+  const next = rows[i + 1];
+  const out = rows.filter((r) => r.key !== key);
+  if (removed.kind === "item" && !removed.orPrevious && next?.kind === "item" && next.orPrevious) {
+    return out.map((r) => (r.key === next.key ? { ...next, orPrevious: false } : r));
+  }
+  return out;
+}
