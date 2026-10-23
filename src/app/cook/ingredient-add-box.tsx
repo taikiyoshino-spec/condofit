@@ -61,10 +61,10 @@ export function IngredientAddBox({
           <input
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
-            placeholder="量"
-            aria-label="量（任意）"
+            placeholder="量（なくてもOK）"
+            aria-label="量（入れなくてもよい）"
             maxLength={30}
-            className="w-16 rounded-xl border border-border bg-surface px-2 py-2.5 text-base"
+            className="w-28 rounded-xl border border-border bg-surface px-2 py-2.5 text-base placeholder:text-xs"
           />
         )}
         <button
