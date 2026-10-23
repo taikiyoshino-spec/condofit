@@ -1,5 +1,5 @@
 import "server-only";
-import { geminiJson, type AiImage } from "@/lib/ai/gemini";
+import { AI_FAILURE_MESSAGE, geminiJson, geminiJsonResult, type AiImage } from "@/lib/ai/gemini";
 import { parseYield, type ImportedRecipe } from "./import";
 
 // CondoCook でのAIの使いどころ（レシピ登録のときだけ。D13）
@@ -35,8 +35,18 @@ type AiRecipe = {
   steps?: string[];
 };
 
-/** ページ本文からレシピを読み取る（読み取れなければ null） */
-export async function aiExtractRecipe(text: string, siteName: string | null): Promise<ImportedRecipe | null> {
+/** AIでの読み取りの結果。失敗したときは画面に出す理由 */
+export type AiRecipeResult = { ok: true; recipe: ImportedRecipe } | { ok: false; message: string };
+
+async function extract(prompt: string, images: AiImage[], siteName: string | null, notFound: string): Promise<AiRecipeResult> {
+  const r = await geminiJsonResult<AiRecipe>(prompt, RECIPE_SCHEMA, images);
+  if (!r.ok) return { ok: false, message: AI_FAILURE_MESSAGE[r.reason] + (r.status ? `（エラー ${r.status}）` : "") };
+  const recipe = toImported(r.data, siteName);
+  return recipe ? { ok: true, recipe } : { ok: false, message: notFound };
+}
+
+/** ページ本文からレシピを読み取る */
+export async function aiExtractRecipe(text: string, siteName: string | null): Promise<AiRecipeResult> {
   const prompt = [
     "次のウェブページの本文から、料理のレシピを1つ読み取ってください。",
     "- レシピが載っていなければ found を false に",
@@ -47,21 +57,24 @@ export async function aiExtractRecipe(text: string, siteName: string | null): Pr
     "--- 本文 ---",
     text,
   ].join("\n");
-  return toImported(await geminiJson<AiRecipe>(prompt, RECIPE_SCHEMA), siteName);
+  return extract(prompt, [], siteName, "このページからレシピを読み取れませんでした。手入力してください");
 }
 
-/** 写真・スクリーンショット（料理本・メモ・アプリの画面など）からレシピを読み取る（読み取れなければ null） */
-export async function aiExtractRecipeFromImages(images: AiImage[]): Promise<ImportedRecipe | null> {
+/** 写真・スクリーンショット（料理本・メモ・表計算・アプリの画面など）からレシピを読み取る */
+export async function aiExtractRecipeFromImages(images: AiImage[]): Promise<AiRecipeResult> {
   const prompt = [
-    "画像（料理本・手書きのメモ・レシピサイトやアプリのスクリーンショットなど）から、料理のレシピを1つ読み取ってください。",
+    "画像（料理本・手書きのメモ・表計算ソフトの表・レシピサイトやアプリのスクリーンショットなど）から、料理のレシピを1つ読み取ってください。",
     "画像が複数あるときは、続きのページとして1つのレシピにまとめてください。",
+    "- 表の形のときは、材料名・分量・備考などの列を読み、備考の補足（「100g」など）は分量に添える（例「半分（100g）」）。空の行は無視する",
+    "- 材料の横に「A」「B」などの印があれば、同じ印の材料をまとめて section にその印を入れる",
+    "- 「何人分」「人数」が「2~3」のように幅があれば小さい方の数を servings に",
     "- レシピが写っていなければ found を false に",
     "- 料理名が読み取れなければ、材料と作り方から短い料理名を付ける",
     "- 材料は name（材料名）と amount（分量。「200g」「大さじ2」「少々」など）に分け、「タレ」「A」などのまとまりがあれば section に",
     "- steps は作り方の手順。写っている内容のまま、1手順1要素で",
     "- 写っていない情報は作らない",
   ].join("\n");
-  return toImported(await geminiJson<AiRecipe>(prompt, RECIPE_SCHEMA, images), null);
+  return extract(prompt, images, null, "写真からレシピを読み取れませんでした。文字がはっきり写った写真で試すか、手入力してください");
 }
 
 function toImported(r: AiRecipe | null, siteName: string | null): ImportedRecipe | null {

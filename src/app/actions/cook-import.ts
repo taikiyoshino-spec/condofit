@@ -25,10 +25,14 @@ export async function importRecipeAction(url: string): Promise<ImportResult> {
   if (!page.ok) return { ok: false, error: page.error };
 
   let usedAi = false;
+  let aiMessage: string | null = null;
   let recipe = extractRecipeFromHtml(page.html);
   if (!recipe && aiAvailable()) {
-    recipe = await aiExtractRecipe(pageText(page.html), siteName(page.html));
-    usedAi = Boolean(recipe);
+    const r = await aiExtractRecipe(pageText(page.html), siteName(page.html));
+    if (r.ok) {
+      recipe = r.recipe;
+      usedAi = true;
+    } else aiMessage = r.message;
   }
   // AIが使えない・読み取れなかったときは、「【材料】」「【作り方】」の見出しで書かれたブログ形式として読む
   if (!recipe) {
@@ -38,7 +42,7 @@ export async function importRecipeAction(url: string): Promise<ImportResult> {
   if (!recipe) {
     return {
       ok: false,
-      error: aiAvailable() ? "このページからレシピを読み取れませんでした。手入力してください" : "このサイトからは自動で読み取れませんでした。手入力してください",
+      error: aiMessage ?? "このサイトからは自動で読み取れませんでした。手入力してください",
     };
   }
 
@@ -79,10 +83,10 @@ export async function importRecipeFromImagesAction(formData: FormData): Promise<
     if (!type) return { ok: false, error: "画像を読み込めませんでした" };
     images.push({ mimeType: type, base64: Buffer.from(bytes).toString("base64") });
   }
-  const recipe = await aiExtractRecipeFromImages(images);
-  if (!recipe) return { ok: false, error: "写真からレシピを読み取れませんでした。文字がはっきり写った写真で試すか、手入力してください" };
-  const matched = await matchToMaster(recipe);
-  return { ok: true, draft: { ...recipe, sourceUrl: "", ingredients: matched.ingredients }, usedAi: true };
+  const r = await aiExtractRecipeFromImages(images);
+  if (!r.ok) return { ok: false, error: r.message };
+  const matched = await matchToMaster(r.recipe);
+  return { ok: true, draft: { ...r.recipe, sourceUrl: "", ingredients: matched.ingredients }, usedAi: true };
 }
 
 
