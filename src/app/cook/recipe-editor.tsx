@@ -13,6 +13,7 @@ import { useLongPressSort } from "@/lib/client/use-long-press-sort";
 import {
   appendLooseItem,
   editorBlocks,
+  groupIntoSection,
   ingredientsToRows,
   insertAfter,
   insertAlternative,
@@ -130,6 +131,8 @@ export function RecipeEditor({
   const [photo, setPhoto] = useState<{ full: Blob; thumb: Blob; preview: string } | null>(null);
   const [removePhoto, setRemovePhoto] = useState(false);
   const [focusedRow, setFocusedRow] = useState<number | null>(null);
+  // 材料を選んで見出しにまとめる（URLから取り込んだあと、タレなどの材料をまとめたいとき）
+  const [grouping, setGrouping] = useState<{ keys: Set<number>; target: string; name: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -175,7 +178,25 @@ export function RecipeEditor({
     >
       {canAlt(i) && r.orPrevious && <p className="mb-1 text-xs font-semibold text-accent">または</p>}
       <div className="flex items-center gap-1">
-        <DragHandle label={`${r.name || "材料"}を並べ替え`} {...rowSort.handleProps(r.key)} />
+        {grouping ? (
+          <input
+            type="checkbox"
+            checked={grouping.keys.has(r.key)}
+            onChange={(e) =>
+              setGrouping((g) => {
+                if (!g) return g;
+                const keys = new Set(g.keys);
+                if (e.target.checked) keys.add(r.key);
+                else keys.delete(r.key);
+                return { ...g, keys };
+              })
+            }
+            aria-label={`${r.name || "材料"}を選ぶ`}
+            className="mx-1 h-5 w-5 shrink-0 accent-[var(--accent)]"
+          />
+        ) : (
+          <DragHandle label={`${r.name || "材料"}を並べ替え`} {...rowSort.handleProps(r.key)} />
+        )}
         <div className="relative min-w-0 flex-[3]">
           <input
             value={r.name}
@@ -483,8 +504,64 @@ export function RecipeEditor({
           >
             ＋ 見出し（タレなど）
           </button>
+          {!grouping && (
+            <button type="button" onClick={() => setGrouping({ keys: new Set(), target: "new", name: "" })} className="text-accent">
+              まとめる
+            </button>
+          )}
         </div>
-        <p className="mt-1 text-xs text-muted">「＋ 材料」は見出しの外（いちばん下）に足します。見出しの中に足すときは、見出しの枠の中のボタンを使ってください。</p>
+        <p className="mt-1 text-xs text-muted">
+          「＋ 材料」は見出しの外（いちばん下）に足します。「まとめる」で、選んだ材料をタレなどの見出しにまとめられます。
+        </p>
+        {grouping && (
+          <div className="sticky bottom-[calc(8rem+env(safe-area-inset-bottom))] z-10 mt-3 space-y-2 rounded-xl border-2 border-accent bg-surface p-3 shadow-lg">
+            <p className="text-sm font-semibold">
+              まとめる材料にチェックを付けてください（{grouping.keys.size}個）
+            </p>
+            <div className="flex gap-2">
+              {editorBlocks(form.rows).some((b) => b.heading) && (
+                <select
+                  value={grouping.target}
+                  onChange={(e) => setGrouping({ ...grouping, target: e.target.value })}
+                  aria-label="まとめる先"
+                  className="rounded-lg border border-border bg-surface px-2 text-sm"
+                >
+                  <option value="new">新しい見出し</option>
+                  {editorBlocks(form.rows).flatMap((b) =>
+                    b.heading ? [<option key={b.heading.key} value={String(b.heading.key)}>{b.heading.name.trim() || "（名前なし）"}</option>] : [],
+                  )}
+                </select>
+              )}
+              {grouping.target === "new" && (
+                <input
+                  value={grouping.name}
+                  onChange={(e) => setGrouping({ ...grouping, name: e.target.value })}
+                  maxLength={20}
+                  placeholder="見出しの名前（例：タレ）"
+                  aria-label="新しい見出しの名前"
+                  className="min-w-0 flex-1 rounded-lg border border-border bg-surface px-2 py-1.5 text-base"
+                />
+              )}
+            </div>
+            <div className="flex justify-end gap-3 text-sm">
+              <button type="button" onClick={() => setGrouping(null)} className="text-muted">
+                やめる
+              </button>
+              <button
+                type="button"
+                disabled={grouping.keys.size === 0 || (grouping.target === "new" && !grouping.name.trim())}
+                onClick={() => {
+                  const target = grouping.target === "new" ? grouping.name : Number(grouping.target);
+                  setForm((f) => ({ ...f, rows: groupIntoSection(f.rows, [...grouping.keys], target, newKey) }));
+                  setGrouping(null);
+                }}
+                className="rounded-lg bg-accent px-4 py-1.5 font-semibold text-accent-fg disabled:opacity-40"
+              >
+                まとめる
+              </button>
+            </div>
+          </div>
+        )}
       </section>
 
       <section className="mx-4 rounded-xl border border-border bg-surface p-4">

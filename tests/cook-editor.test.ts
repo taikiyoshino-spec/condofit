@@ -101,3 +101,36 @@ test("insertAlternative / removeRow: 「または」の行を足す・消す", a
   ], "先頭を消すと次の材料が先頭になる");
   assert.equal(removeRow(rows, 999), rows);
 });
+
+test("groupIntoSection: 選んだ材料を見出しにまとめる", async () => {
+  const { groupIntoSection, editorBlocks } = await import("../src/lib/cook/editor.ts");
+  let k = 0;
+  const next = () => ++k;
+  const item = (name: string, orPrevious = false) => ({ key: next(), kind: "item" as const, ingredientId: null, name, amount: "", optional: false, orPrevious });
+  const view = (rs: Parameters<typeof editorBlocks>[0]) =>
+    editorBlocks(rs).map((b) => `${b.heading ? b.heading.name : "-"}:${b.items.map((i) => (i.row.orPrevious ? "/" : "") + i.row.name).join(",")}`);
+  const pork = item("豚肉");
+  const soy = item("しょうゆ");
+  const tsuyu = item("めんつゆ", true);
+  const cabbage = item("キャベツ");
+  const mirin = item("みりん");
+  const rows = [pork, soy, tsuyu, cabbage, mirin];
+
+  const grouped = groupIntoSection(rows, [soy.key, mirin.key], " タレ ", next);
+  assert.deepEqual(view(grouped), ["-:豚肉,キャベツ", "タレ:しょうゆ,/めんつゆ,みりん"], "「または」の代わりの材料も一緒に動く");
+  assert.deepEqual(rowsToIngredients(grouped).map((i) => [i.name, i.section, i.orPrevious]), [
+    ["豚肉", null, false],
+    ["キャベツ", null, false],
+    ["しょうゆ", "タレ", false],
+    ["めんつゆ", "タレ", true],
+    ["みりん", "タレ", false],
+  ]);
+
+  // すでにある見出しへ
+  const heading = grouped.find((r) => r.kind === "heading")!;
+  assert.deepEqual(view(groupIntoSection(grouped, [cabbage.key], heading.key, next)), ["-:豚肉", "タレ:しょうゆ,/めんつゆ,みりん,キャベツ"]);
+
+  // 代わりの材料だけを動かすと、ふつうの材料になる。先頭だけ残る
+  assert.deepEqual(view(groupIntoSection(rows, [tsuyu.key], "A", next)), ["-:豚肉,しょうゆ,キャベツ,みりん", "A:めんつゆ"]);
+  assert.equal(groupIntoSection(rows, [], "A", next), rows);
+});

@@ -155,3 +155,41 @@ export function removeRow(rows: EditorRow[], key: number): EditorRow[] {
   }
   return out;
 }
+
+/**
+ * 選んだ材料を見出しにまとめる。target が見出しの key ならその見出しの最後へ、文字列なら新しい見出しを作っていちばん下へ。
+ * 「または」の先頭を選んだら代わりの材料も一緒に動かし、先頭を選ばずに動かした代わりの材料はふつうの材料にする
+ */
+export function groupIntoSection(rows: EditorRow[], keys: number[], target: number | string, nextKey: () => number): EditorRow[] {
+  // 「または」の先頭を選んだら、続く代わりの材料も選ぶ
+  const selected = new Set(keys);
+  rows.forEach((r, i) => {
+    if (r.kind !== "item" || !selected.has(r.key) || r.orPrevious) return;
+    for (let j = i + 1; j < rows.length; j++) {
+      const n = rows[j];
+      if (n.kind !== "item" || !n.orPrevious) break;
+      selected.add(n.key);
+    }
+  });
+  const moving: EditorItem[] = [];
+  rows.forEach((r, i) => {
+    if (r.kind !== "item" || !selected.has(r.key)) return;
+    const prev = rows[i - 1];
+    const headMoves = prev?.kind === "item" && selected.has(prev.key);
+    moving.push({ ...r, orPrevious: Boolean(r.orPrevious) && headMoves });
+  });
+  if (moving.length === 0) return rows;
+  // 残る行: 先頭が動いて取り残された代わりの材料は、ふつうの材料にする
+  const rest: EditorRow[] = [];
+  for (const r of rows) {
+    if (r.kind === "item" && selected.has(r.key)) continue;
+    const prev = rest[rest.length - 1];
+    rest.push(r.kind === "item" && r.orPrevious && prev?.kind !== "item" ? { ...r, orPrevious: false } : r);
+  }
+  if (typeof target === "number") {
+    const block = editorBlocks(rest).find((b) => b.heading?.key === target);
+    if (!block) return rows;
+    return [...rest.slice(0, block.lastIndex + 1), ...moving, ...rest.slice(block.lastIndex + 1)];
+  }
+  return [...rest, { key: nextKey(), kind: "heading", name: target.trim().slice(0, 20), isSection: true }, ...moving];
+}
