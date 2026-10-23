@@ -10,8 +10,10 @@ export function aiAvailable(): boolean {
   return Boolean(process.env.GEMINI_API_KEY);
 }
 
-/** JSONで答えてもらう（responseSchema で形を指定）。失敗・上限到達・キー未設定は null */
-export async function geminiJson<T>(prompt: string, schema: object): Promise<T | null> {
+export type AiImage = { mimeType: string; base64: string };
+
+/** JSONで答えてもらう（responseSchema で形を指定）。画像も一緒に渡せる。失敗・上限到達・キー未設定は null */
+export async function geminiJson<T>(prompt: string, schema: object, images: AiImage[] = []): Promise<T | null> {
   const key = process.env.GEMINI_API_KEY;
   if (!key) return null;
   const model = process.env.GEMINI_MODEL || DEFAULT_MODEL;
@@ -20,7 +22,12 @@ export async function geminiJson<T>(prompt: string, schema: object): Promise<T |
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": key },
       body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
+        contents: [
+          {
+            role: "user",
+            parts: [...images.map((i) => ({ inline_data: { mime_type: i.mimeType, data: i.base64 } })), { text: prompt }],
+          },
+        ],
         generationConfig: {
           responseMimeType: "application/json",
           responseSchema: schema,

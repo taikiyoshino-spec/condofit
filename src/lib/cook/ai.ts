@@ -1,9 +1,9 @@
 import "server-only";
-import { geminiJson } from "@/lib/ai/gemini";
+import { geminiJson, type AiImage } from "@/lib/ai/gemini";
 import { parseYield, type ImportedRecipe } from "./import";
 
 // CondoCook でのAIの使いどころ（レシピ登録のときだけ。D13）
-// 1. 構造化データのないページからレシピを読み取る
+// 1. 構造化データのないページ、または写真・スクリーンショットからレシピを読み取る
 // 2. 食材マスタの別名で当たらなかった材料名を、食材マスタの名前に当てはめる
 
 const RECIPE_SCHEMA = {
@@ -47,7 +47,24 @@ export async function aiExtractRecipe(text: string, siteName: string | null): Pr
     "--- 本文 ---",
     text,
   ].join("\n");
-  const r = await geminiJson<AiRecipe>(prompt, RECIPE_SCHEMA);
+  return toImported(await geminiJson<AiRecipe>(prompt, RECIPE_SCHEMA), siteName);
+}
+
+/** 写真・スクリーンショット（料理本・メモ・アプリの画面など）からレシピを読み取る（読み取れなければ null） */
+export async function aiExtractRecipeFromImages(images: AiImage[]): Promise<ImportedRecipe | null> {
+  const prompt = [
+    "画像（料理本・手書きのメモ・レシピサイトやアプリのスクリーンショットなど）から、料理のレシピを1つ読み取ってください。",
+    "画像が複数あるときは、続きのページとして1つのレシピにまとめてください。",
+    "- レシピが写っていなければ found を false に",
+    "- 料理名が読み取れなければ、材料と作り方から短い料理名を付ける",
+    "- 材料は name（材料名）と amount（分量。「200g」「大さじ2」「少々」など）に分け、「タレ」「A」などのまとまりがあれば section に",
+    "- steps は作り方の手順。写っている内容のまま、1手順1要素で",
+    "- 写っていない情報は作らない",
+  ].join("\n");
+  return toImported(await geminiJson<AiRecipe>(prompt, RECIPE_SCHEMA, images), null);
+}
+
+function toImported(r: AiRecipe | null, siteName: string | null): ImportedRecipe | null {
   if (!r?.found || !r.title || !r.ingredients?.length) return null;
   return {
     title: r.title.trim().slice(0, 60),

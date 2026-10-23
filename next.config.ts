@@ -1,6 +1,12 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  experimental: {
+    serverActions: {
+      // 写真・スクリーンショットからのレシピの取り込み（端末で縮小した画像を3枚まで）とレシピの写真のため。Vercel の上限 4.5MB の内側
+      bodySizeLimit: "4mb",
+    },
+  },
   async headers() {
     return [
       {

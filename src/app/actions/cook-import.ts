@@ -3,14 +3,15 @@
 import { requireCookUser } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { aiAvailable } from "@/lib/ai/gemini";
-import { aiExtractRecipe, aiMatchIngredients } from "@/lib/cook/ai";
+import { aiExtractRecipe, aiExtractRecipeFromImages, aiMatchIngredients } from "@/lib/cook/ai";
+import { detectImageType } from "@/lib/avatar";
 import { fetchRecipePage } from "@/lib/cook/fetch-page";
 import { extractRecipeFromHtml, extractRecipeFromText, pageText, pageTitle, siteName, type ImportedRecipe } from "@/lib/cook/import";
 import { INGREDIENT_CATEGORIES, cleanReading, matchIngredient, type IngredientCategory } from "@/lib/cook/ingredients";
 import { listIngredients, type IngredientOption } from "@/lib/cook/queries";
 
-// レシピサイトのURLから下書きを作る（RECIPE_SPEC.md D12・D13）。
-// 写真は取り込まない。本人が登録画面で直してから登録する
+// レシピサイトのURL、または写真・スクリーンショットから下書きを作る（RECIPE_SPEC.md D12・D13）。
+// サイトの写真は取り込まない。本人が登録画面で直してから登録する
 
 export type ImportDraft = Omit<ImportedRecipe, "ingredients"> & {
   sourceUrl: string;
@@ -41,7 +42,13 @@ export async function importRecipeAction(url: string): Promise<ImportResult> {
     };
   }
 
-  // 材料名を食材マスタに当てはめる（名前・別名で当たらないものだけAIに聞く）
+  const matched = await matchToMaster(recipe);
+  return { ok: true, draft: { ...recipe, sourceUrl: page.finalUrl, ingredients: matched.ingredients }, usedAi: usedAi || matched.usedAi };
+}
+
+/** 材料名を食材マスタに当てはめる（名前・別名で当たらないものだけAIに聞く） */
+async function matchToMaster(recipe: ImportedRecipe): Promise<{ ingredients: ImportDraft["ingredients"]; usedAi: boolean }> {
+  let usedAi = false;
   const master = await listIngredients();
   const ingredients = recipe.ingredients.map((i) => ({ ...i, ingredientId: matchIngredient(i.name, master)?.id ?? null }));
   const unmatched = [...new Set(ingredients.filter((i) => !i.ingredientId).map((i) => i.name))];
@@ -51,7 +58,31 @@ export async function importRecipeAction(url: string): Promise<ImportResult> {
     if (matched.size > 0) usedAi = true;
     for (const i of ingredients) if (!i.ingredientId && matched.has(i.name)) i.ingredientId = byName.get(matched.get(i.name)!) ?? null;
   }
-  return { ok: true, draft: { ...recipe, sourceUrl: page.finalUrl, ingredients }, usedAi };
+  return { ingredients, usedAi };
+}
+
+const MAX_IMAGES = 3;
+const MAX_IMAGE_BYTES = 1.5 * 1024 * 1024;
+
+/** 写真・スクリーンショット（料理本・メモ・アプリの画面など）から下書きを作る。AIが使えるときだけ。画像は端末で縮小してから送る */
+export async function importRecipeFromImagesAction(formData: FormData): Promise<ImportResult> {
+  await requireCookUser();
+  if (!aiAvailable()) return { ok: false, error: "写真からの取り込みは今は使えません。手入力してください" };
+  const files = formData.getAll("image").filter((v): v is File => v instanceof File && v.size > 0);
+  if (files.length === 0) return { ok: false, error: "写真を選んでください" };
+  if (files.length > MAX_IMAGES) return { ok: false, error: `写真は${MAX_IMAGES}枚までです` };
+  const images = [];
+  for (const file of files) {
+    if (file.size > MAX_IMAGE_BYTES) return { ok: false, error: "写真が大きすぎます" };
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const type = detectImageType(bytes);
+    if (!type) return { ok: false, error: "画像を読み込めませんでした" };
+    images.push({ mimeType: type, base64: Buffer.from(bytes).toString("base64") });
+  }
+  const recipe = await aiExtractRecipeFromImages(images);
+  if (!recipe) return { ok: false, error: "写真からレシピを読み取れませんでした。文字がはっきり写った写真で試すか、手入力してください" };
+  const matched = await matchToMaster(recipe);
+  return { ok: true, draft: { ...recipe, sourceUrl: "", ingredients: matched.ingredients }, usedAi: true };
 }
 
 

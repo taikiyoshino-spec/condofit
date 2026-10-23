@@ -3,6 +3,7 @@ import { getRecipe, listCategories, listIngredients } from "@/lib/cook/queries";
 import { PageHeader } from "@/components/page";
 import { RecipeEditor } from "../recipe-editor";
 import { NewRecipe } from "./new-recipe";
+import { aiAvailable } from "@/lib/ai/gemini";
 
 const UUID_RE = /^[0-9a-f-]{36}$/i;
 
@@ -24,7 +25,7 @@ export default async function NewRecipePage({ searchParams }: PageProps<"/cook/n
       {copyFrom ? (
         <RecipeEditor mode="new" recipe={null} copyFrom={copyFrom} categories={categories} ingredients={ingredients} />
       ) : (
-        <NewRecipe categories={categories} ingredients={ingredients} />
+        <NewRecipe categories={categories} ingredients={ingredients} imageImport={aiAvailable()} />
       )}
     </>
   );
