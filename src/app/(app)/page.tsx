@@ -17,6 +17,7 @@ import { NotificationBell } from "./notification-bell";
 import { RelativeTime } from "./relative-time";
 import { InstallPrompt } from "./install-prompt";
 import { PushPrompt } from "./push-prompt";
+import { aiAvailable } from "@/lib/ai/gemini";
 
 export default async function HomePage() {
   const member = await requireMember();
@@ -38,7 +39,7 @@ export default async function HomePage() {
       <PushPrompt vapidPublicKey={process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? ""} sessionId={member.sessionId} />
 
       <Suspense>
-        <FitStatus initial={active} myId={member.id} />
+        <FitStatus initial={active} myId={member.id} aiReady={aiAvailable()} />
       </Suspense>
 
       <NextDays today={today} schedules={schedules} myId={member.id} />

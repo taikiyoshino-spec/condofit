@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { checkInAction, checkOutAction, verifyLocationAction } from "@/app/actions/checkin";
 import { Avatar } from "@/components/avatar";
@@ -36,12 +37,15 @@ async function fetchActive(): Promise<ActiveCheckIn[]> {
   }));
 }
 
-export function FitStatus({ initial, myId }: { initial: ActiveCheckIn[]; myId: string }) {
+/** aiReady: AIと相談して記録を始められる（キーが設定されている） */
+export function FitStatus({ initial, myId, aiReady }: { initial: ActiveCheckIn[]; myId: string; aiReady: boolean }) {
   const searchParams = useSearchParams();
   const [active, setActive] = useState(initial);
   const [sheetOpen, setSheetOpen] = useState(searchParams.get("fit") === "1");
   const [now, setNow] = useState(() => Date.now());
   const [locationNote, setLocationNote] = useState<string | null>(null);
+  // チェックインできたら「このまま記録を始めますか？」を出す
+  const [startPrompt, setStartPrompt] = useState(false);
   const [pending, startTransition] = useTransition();
   const lastVerifyRef = useRef(0);
 
@@ -107,8 +111,8 @@ export function FitStatus({ initial, myId }: { initial: ActiveCheckIn[]; myId: s
         if (result.ok) {
           lastVerifyRef.current = Date.now();
           setLocationNote(null);
-          showToast("チェックインしました");
           await refresh();
+          setStartPrompt(true);
         } else {
           showToast(CHECK_IN_ERRORS[result.reason]);
         }
@@ -148,6 +152,9 @@ export function FitStatus({ initial, myId }: { initial: ActiveCheckIn[]; myId: s
               {myStale && <span className="ml-2 text-warn">⚠ 位置情報を確認できていません</span>}
             </p>
             {locationNote && <p className="text-xs text-muted">{locationNote}</p>}
+            <Link href="/records/start" className="block w-full rounded-lg bg-accent px-4 py-2.5 text-center font-medium text-accent-fg">
+              記録を始める
+            </Link>
             <div className="flex gap-2">
               <button
                 type="button"
@@ -181,6 +188,26 @@ export function FitStatus({ initial, myId }: { initial: ActiveCheckIn[]; myId: s
           </button>
         )}
       </div>
+
+      <BottomSheet open={startPrompt} onClose={() => setStartPrompt(false)} title="チェックインしました">
+        <p className="text-sm">このまま記録を始めますか？</p>
+        <div className="mt-4 space-y-2">
+          {aiReady && (
+            <Link href="/records/ai" className="block w-full rounded-lg bg-accent py-3 text-center font-semibold text-accent-fg">
+              AIと相談して始める
+            </Link>
+          )}
+          <Link
+            href="/records/start"
+            className={`block w-full rounded-lg py-3 text-center font-semibold ${aiReady ? "border border-accent text-accent" : "bg-accent text-accent-fg"}`}
+          >
+            {aiReady ? "メニューから・自由に始める" : "記録を始める"}
+          </Link>
+          <button type="button" onClick={() => setStartPrompt(false)} className="w-full py-2.5 text-sm text-muted">
+            あとで
+          </button>
+        </div>
+      </BottomSheet>
 
       <BottomSheet open={sheetOpen} onClose={() => setSheetOpen(false)} title={`Fit中 ${active.length}人`}>
         {active.length === 0 ? (
