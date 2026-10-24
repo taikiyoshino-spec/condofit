@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { generateTodayMenuAction } from "@/app/actions/menu-ai";
+import { generateTodayMenuAction, type TodayProposal } from "@/app/actions/menu-ai";
 import { saveMenuAction } from "@/app/actions/menus";
 import { PageHeader } from "@/components/page";
 import { showToast } from "@/components/toaster";
@@ -21,9 +21,7 @@ function setText(s: Partial<Entry>) {
   return parts.join("×") || "—";
 }
 
-type Proposal = { menu: MenuForEditor; comment: string | null; dropped: string[] };
-
-/** 今日の調子・やりたい部位・時間を選ぶ → AIの案を確かめる → そのまま記録（記録画面は同じ画面のまま切り替える） */
+/** 今日の調子・やりたい部位・時間を選ぶ → AIの案（いくつか）から選ぶ → そのまま記録（記録画面は同じ画面のまま切り替える） */
 export function TodayAi({
   catalog,
   history,
@@ -40,7 +38,7 @@ export function TodayAi({
   const [parts, setParts] = useState<string[]>([]);
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [proposal, setProposal] = useState<Proposal | null>(null);
+  const [proposals, setProposals] = useState<TodayProposal[] | null>(null);
   const [saveAsMenu, setSaveAsMenu] = useState(false);
   const [started, setStarted] = useState<MenuForEditor | null>(null);
   const [pending, startTransition] = useTransition();
@@ -69,14 +67,13 @@ export function TodayAi({
       const r = await generateTodayMenuAction({ condition, minutes, parts, note }).catch(() => null);
       if (!r) return setError("AIにつながりませんでした。時間をおいて試してください");
       if (!r.ok) return setError(r.error);
-      setProposal({ menu: r.menu, comment: r.comment, dropped: r.dropped });
+      setProposals(r.proposals);
       window.scrollTo({ top: 0 });
     });
 
-  const start = () =>
+  const start = (chosen: TodayProposal) =>
     startTransition(async () => {
-      if (!proposal) return;
-      let menu = proposal.menu;
+      let menu = chosen.menu;
       if (saveAsMenu) {
         const r = await saveMenuAction(null, { name: menu.name, items: menu.items.map((it) => ({ exerciseId: it.exerciseId, sets: it.sets })) });
         if (!r.ok) return showToast(r.error);
@@ -107,45 +104,52 @@ export function TodayAi({
 
   const chip = (on: boolean) => `rounded-full px-3 py-1.5 text-sm ${on ? "bg-accent font-medium text-accent-fg" : "border border-border"}`;
 
-  if (proposal) {
-    const { menu, comment, dropped } = proposal;
+  if (proposals) {
     return (
       <>
         <PageHeader title="今日のメニュー" back="/records/start" />
-        <section className="mx-4 mb-4 rounded-xl border border-accent bg-surface p-4">
-          <h2 className="text-lg font-semibold">{menu.name}</h2>
-          {comment && <p className="mt-1 text-sm text-muted">{comment}</p>}
-          <ul className="mt-3 divide-y divide-border">
-            {menu.items.map((it, i) => (
-              <li key={i} className="py-2.5">
-                <p className="font-medium">{it.name}</p>
-                <p className="text-sm text-muted">{it.sets.length ? it.sets.map(setText).join("、") : "セットなし"}</p>
-              </li>
-            ))}
-          </ul>
-          {dropped.length > 0 && <p className="mt-2 text-xs text-muted">ジムの種目にない「{dropped.join("」「")}」は外しました。</p>}
-          <p className="mt-2 text-xs text-muted">重さが空の種目は、その場で決めて入れてください。始めてから種目の追加・削除もできます。</p>
-          <label className="mt-3 flex items-center gap-2 text-sm">
+        <p className="px-4 pb-3 text-sm text-muted">
+          {proposals.length > 1 ? `AIが${proposals.length}つの案を作りました。やりたい案を選んでください。` : "AIが案を作りました。"}
+        </p>
+        {proposals.map(({ menu, comment, dropped }, i) => (
+          <section key={i} className="mx-4 mb-3 rounded-xl border border-border bg-surface p-4">
+            <p className="text-xs font-medium text-accent">案{i + 1}</p>
+            <h2 className="text-lg font-semibold">{menu.name}</h2>
+            {comment && <p className="mt-1 text-sm text-muted">{comment}</p>}
+            <ul className="mt-2 divide-y divide-border">
+              {menu.items.map((it, k) => (
+                <li key={k} className="flex items-baseline justify-between gap-3 py-2">
+                  <span className="min-w-0 font-medium">{it.name}</span>
+                  <span className="shrink-0 text-right text-sm text-muted">{it.sets.length ? it.sets.map(setText).join("、") : "セットなし"}</span>
+                </li>
+              ))}
+            </ul>
+            {dropped.length > 0 && <p className="mt-1 text-xs text-muted">ジムの種目にない「{dropped.join("」「")}」は外しました。</p>}
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => start(proposals[i])}
+              className="mt-3 w-full rounded-lg bg-accent py-3 font-semibold text-accent-fg disabled:opacity-50"
+            >
+              この案で始める
+            </button>
+          </section>
+        ))}
+        <div className="mx-4 mb-6 space-y-3">
+          <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={saveAsMenu} onChange={(e) => setSaveAsMenu(e.target.checked)} className="h-4 w-4" />
-            メニューにも保存する（次から「メニューから始める」で使える）
+            選んだ案をメニューにも保存する（次から「メニューから始める」で使える）
           </label>
+          <p className="text-xs text-muted">重さが空の種目は、その場で決めて入れてください。始めてから種目の追加・削除もできます。</p>
           <button
             type="button"
             disabled={pending}
-            onClick={start}
-            className="mt-3 w-full rounded-lg bg-accent py-3 font-semibold text-accent-fg disabled:opacity-50"
-          >
-            このメニューで始める
-          </button>
-          <button
-            type="button"
-            disabled={pending}
-            onClick={() => setProposal(null)}
-            className="mt-2 w-full rounded-lg border border-border py-2.5 text-sm disabled:opacity-50"
+            onClick={() => setProposals(null)}
+            className="w-full rounded-lg border border-border py-2.5 text-sm disabled:opacity-50"
           >
             条件を変えて作り直す
           </button>
-        </section>
+        </div>
       </>
     );
   }
@@ -220,7 +224,7 @@ export function TodayAi({
           onClick={generate}
           className="mt-4 w-full rounded-lg bg-accent py-3 font-semibold text-accent-fg disabled:opacity-50"
         >
-          {pending ? "AIが考えています…（10秒ほど）" : "今日のメニューを作ってもらう"}
+          {pending ? "AIが考えています…（10秒ほど）" : "今日のメニューの案を作ってもらう"}
         </button>
         <p className="mt-2 text-xs text-muted">名前は送りません。送るのは調子・希望・最近の記録の数字だけです。</p>
       </section>

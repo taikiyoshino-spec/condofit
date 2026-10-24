@@ -45,6 +45,7 @@ test("今日のメニューの依頼: 調子・部位・時間。部位がなけ
       { name: "脚", sets: 0, daysAgo: null },
     ],
   });
+  assert.match(p, /今日のメニューの案を3つ/, "1回の問い合わせで案をいくつか");
   assert.match(p, /調子: 疲れぎみ（.*軽め/);
   assert.match(p, /やりたい部位: おまかせ/);
   assert.match(p, /- 胸: 12セット・最後は2日前/);

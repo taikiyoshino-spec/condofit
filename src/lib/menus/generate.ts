@@ -71,6 +71,9 @@ export function buildGeneratePrompt({
   return lines.join("\n");
 }
 
+/** 今日のメニューの案の数（1回の問い合わせでまとめて作ってもらう） */
+export const TODAY_PROPOSALS = 3;
+
 /** 今日の調子（記録を始めるときにAIと相談する） */
 export const CONDITIONS = ["絶好調", "ふつう", "疲れぎみ"] as const;
 const CONDITION_RULE: Record<(typeof CONDITIONS)[number], string> = {
@@ -107,7 +110,8 @@ export function buildTodayPrompt({
   parts: PartRecency[];
 }): string {
   const lines: string[] = [
-    "これからジムでトレーニングをする人の、今日のメニューを1つ作ってください。",
+    `これからジムでトレーニングをする人の、今日のメニューの案を${TODAY_PROPOSALS}つ作ってください。`,
+    "案どうしは、部位の組み合わせ・種目・強さのどれかをはっきり変えて、選びがいのあるものにしてください（どれも下の希望には合わせる）。",
     "",
     "【今日】",
     `- 調子: ${request.condition}（${CONDITION_RULE[request.condition]}）`,
@@ -134,8 +138,8 @@ export function buildTodayPrompt({
     "- 重量系は weight_kg（kg）と reps（回）、有酸素は duration_min（分）と distance_km（km、なければ省く）。セットの数だけ sets に並べる",
     "- 最近の記録がある種目は、その重さ・回数と今日の調子から決める",
     "- 最近の記録がない重量系の種目は weight_kg を入れず、reps だけにする（重さは本人がその場で決める）",
-    "- name は今日のメニューの短い名前（「背中と脚の日」など、20文字くらいまで）",
-    "- comment は、今日のねらいとコツを2文で（120文字以内）。けが・病気の助言はしない",
+    "- menus に案を並べる。name はその案の短い名前（「背中と脚の日」「軽めの全身」など、20文字くらいまで。案ごとに違う名前）",
+    "- comment は、その案のねらいとコツを2文で（120文字以内）。けが・病気の助言はしない",
   );
   return lines.join("\n");
 }
@@ -175,4 +179,11 @@ export const GENERATE_SCHEMA = {
     },
   },
   required: ["name", "items"],
+};
+
+/** 今日のメニュー（案をいくつか）の答えの形 */
+export const TODAY_SCHEMA = {
+  type: "OBJECT",
+  properties: { menus: { type: "ARRAY", items: GENERATE_SCHEMA } },
+  required: ["menus"],
 };

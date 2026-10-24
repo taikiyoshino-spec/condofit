@@ -4,7 +4,15 @@ import { requireMember } from "@/lib/auth/session";
 import { AI_FAILURE_MESSAGE, geminiJsonResult } from "@/lib/ai/gemini";
 import { getCatalog, getMyExerciseHistory } from "@/lib/records/queries";
 import { getMyMenu } from "@/lib/menus/queries";
-import { buildGeneratePrompt, buildTodayPrompt, cleanMenuRequest, cleanTodayRequest, GENERATE_SCHEMA } from "@/lib/menus/generate";
+import {
+  buildGeneratePrompt,
+  buildTodayPrompt,
+  cleanMenuRequest,
+  cleanTodayRequest,
+  GENERATE_SCHEMA,
+  TODAY_PROPOSALS,
+  TODAY_SCHEMA,
+} from "@/lib/menus/generate";
 import { matchExercise, parseMenuText, type TextMenu } from "@/lib/menus/text";
 import { getPartSessions, listPartInfo, recentFourWeeks } from "@/lib/records/parts-queries";
 import { partBalance } from "@/lib/records/parts";
@@ -57,12 +65,11 @@ export async function generateMenuAction(raw: unknown, menuId: string | null): P
   return { ok: true, menu: parsed.menu, comment: comment ? [...comment].slice(0, 200).join("") : null };
 }
 
-export type TodayMenuResult =
-  | { ok: true; menu: MenuForEditor; comment: string | null; dropped: string[] }
-  | { ok: false; error: string };
+export type TodayProposal = { menu: MenuForEditor; comment: string | null; dropped: string[] };
+export type TodayMenuResult = { ok: true; proposals: TodayProposal[] } | { ok: false; error: string };
 
 /**
- * 記録を始めるときに、今日の調子と希望・最近の記録から、AIに今日のメニューを作ってもらう（保存はしない）。
+ * 記録を始めるときに、今日の調子と希望・最近の記録から、AIに今日のメニューの案をいくつか作ってもらう（保存はしない）。
  * 一覧にない種目は外す（その場で記録を始めるため）
  */
 export async function generateTodayMenuAction(raw: unknown): Promise<TodayMenuResult> {
@@ -96,28 +103,32 @@ export async function generateTodayMenuAction(raw: unknown): Promise<TodayMenuRe
       .map((p) => ({ name: p.name, sets: p.sets, daysAgo: p.lastDate ? Math.round((Date.parse(today) - Date.parse(p.lastDate)) / 86400e3) : null })),
   });
 
-  const r = await geminiJsonResult<{ name?: string; comment?: string; items?: unknown }>(prompt, GENERATE_SCHEMA, {
+  const r = await geminiJsonResult<{ menus?: { name?: string; comment?: string; items?: unknown }[] }>(prompt, TODAY_SCHEMA, {
     feature: "fit_today",
-    timeoutMs: 40000,
-    temperature: 0.6,
+    timeoutMs: 45000,
+    temperature: 0.8,
   });
   if (!r.ok) return { ok: false, error: AI_FAILURE_MESSAGE[r.reason] };
-  const parsed = parseMenuText(JSON.stringify({ name: r.data.name, items: r.data.items }));
-  if (!parsed.ok) return { ok: false, error: "AIの答えをメニューにできませんでした。もう一度試してください" };
 
-  const items: MenuForEditor["items"] = [];
-  const dropped: string[] = [];
-  for (const it of parsed.menu.items) {
-    const hit = matchExercise(it.exercise, catalog.exercises);
-    if (hit) items.push({ exerciseId: hit.id, name: hit.name, type: hit.type, sets: it.sets });
-    else dropped.push(it.exercise);
+  const proposals: TodayProposal[] = [];
+  for (const m of (Array.isArray(r.data.menus) ? r.data.menus : []).slice(0, TODAY_PROPOSALS)) {
+    const parsed = parseMenuText(JSON.stringify({ name: m?.name, items: m?.items }));
+    if (!parsed.ok) continue;
+    const items: MenuForEditor["items"] = [];
+    const dropped: string[] = [];
+    for (const it of parsed.menu.items) {
+      const hit = matchExercise(it.exercise, catalog.exercises);
+      if (hit) items.push({ exerciseId: hit.id, name: hit.name, type: hit.type, sets: it.sets });
+      else dropped.push(it.exercise);
+    }
+    if (items.length === 0) continue;
+    const comment = String(m?.comment ?? "").trim();
+    proposals.push({
+      menu: { id: null, name: parsed.menu.name, items },
+      comment: comment ? [...comment].slice(0, 200).join("") : null,
+      dropped,
+    });
   }
-  if (items.length === 0) return { ok: false, error: "ジムにある種目でメニューを作れませんでした。もう一度試してください" };
-  const comment = String(r.data.comment ?? "").trim();
-  return {
-    ok: true,
-    menu: { id: null, name: parsed.menu.name, items },
-    comment: comment ? [...comment].slice(0, 200).join("") : null,
-    dropped,
-  };
+  if (proposals.length === 0) return { ok: false, error: "ジムにある種目でメニューを作れませんでした。もう一度試してください" };
+  return { ok: true, proposals };
 }
