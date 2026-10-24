@@ -1,8 +1,10 @@
 "use server";
 
+import { after } from "next/server";
 import { requireCookUser } from "@/lib/auth/session";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { aiAvailable } from "@/lib/ai/gemini";
+import { aiAvailable, type AiImage } from "@/lib/ai/gemini";
 import { aiExtractRecipe, aiExtractRecipeFromImages, aiMatchIngredients } from "@/lib/cook/ai";
 import { detectImageType } from "@/lib/avatar";
 import { fetchRecipePage } from "@/lib/cook/fetch-page";
@@ -19,8 +21,8 @@ export type ImportDraft = Omit<ImportedRecipe, "ingredients"> & {
 };
 export type ImportResult = { ok: true; draft: ImportDraft; usedAi: boolean } | { ok: false; error: string };
 
-export async function importRecipeAction(url: string): Promise<ImportResult> {
-  await requireCookUser();
+/** URLから読み取る（受付のあと、サーバーで続けて行う） */
+async function runUrlImport(url: string): Promise<ImportResult> {
   const page = await fetchRecipePage(String(url ?? ""));
   if (!page.ok) return { ok: false, error: page.error };
 
@@ -68,21 +70,8 @@ async function matchToMaster(recipe: ImportedRecipe): Promise<{ ingredients: Imp
 const MAX_IMAGES = 3;
 const MAX_IMAGE_BYTES = 1.5 * 1024 * 1024;
 
-/** 写真・スクリーンショット（料理本・メモ・アプリの画面など）から下書きを作る。AIが使えるときだけ。画像は端末で縮小してから送る */
-export async function importRecipeFromImagesAction(formData: FormData): Promise<ImportResult> {
-  await requireCookUser();
-  if (!aiAvailable()) return { ok: false, error: "写真からの取り込みは今は使えません。手入力してください" };
-  const files = formData.getAll("image").filter((v): v is File => v instanceof File && v.size > 0);
-  if (files.length === 0) return { ok: false, error: "写真を選んでください" };
-  if (files.length > MAX_IMAGES) return { ok: false, error: `写真は${MAX_IMAGES}枚までです` };
-  const images = [];
-  for (const file of files) {
-    if (file.size > MAX_IMAGE_BYTES) return { ok: false, error: "写真が大きすぎます" };
-    const bytes = new Uint8Array(await file.arrayBuffer());
-    const type = detectImageType(bytes);
-    if (!type) return { ok: false, error: "画像を読み込めませんでした" };
-    images.push({ mimeType: type, base64: Buffer.from(bytes).toString("base64") });
-  }
+/** 写真から読み取る（受付のあと、サーバーで続けて行う） */
+async function runImageImport(images: AiImage[]): Promise<ImportResult> {
   const r = await aiExtractRecipeFromImages(images);
   if (!r.ok) return { ok: false, error: r.message };
   const matched = await matchToMaster(r.recipe);
@@ -91,6 +80,81 @@ export async function importRecipeFromImagesAction(formData: FormData): Promise<
 
 
 /** 食材マスタにない食材を追加する（名前・読み・分類だけ。日数などは管理者が整える。D7） */
+// ---- 受付（AIでの読み取りに時間がかかるため、受け付けたらすぐ返事をしてサーバーで続ける） ----
+// スマホで別のアプリを開くと画面が止まり、結果を受け取れないことがあるため。画面は戻ってきたときに結果を見に来る
+
+export type StartResult = { ok: true; jobId: string } | { ok: false; error: string };
+export type JobStatus = { status: "pending" } | ({ status: "done" } & Extract<ImportResult, { ok: true }>) | { status: "failed"; error: string };
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+async function startJob(userId: string, run: () => Promise<ImportResult>): Promise<StartResult> {
+  const admin = createAdminClient();
+  // 古い受付（1日より前）は片付ける
+  await admin.from("recipe_import_jobs").delete().eq("user_id", userId).lt("created_at", new Date(Date.now() - 86400000).toISOString());
+  const { data, error } = await admin.from("recipe_import_jobs").insert({ user_id: userId }).select("id").single();
+  if (error) return { ok: false, error: "受け付けられませんでした。もう一度試してください" };
+  const jobId = data.id as string;
+  after(async () => {
+    let result: ImportResult;
+    try {
+      result = await run();
+    } catch {
+      result = { ok: false, error: "読み取りの途中で失敗しました。もう一度試してください" };
+    }
+    await admin
+      .from("recipe_import_jobs")
+      .update(
+        result.ok
+          ? { status: "done", result: { draft: result.draft, usedAi: result.usedAi } }
+          : { status: "failed", error: result.error.slice(0, 300) },
+      )
+      .eq("id", jobId);
+  });
+  return { ok: true, jobId };
+}
+
+/** URLからの取り込みを受け付ける */
+export async function startUrlImportAction(url: string): Promise<StartResult> {
+  const member = await requireCookUser();
+  const u = String(url ?? "").trim();
+  if (!u) return { ok: false, error: "URLを入力してください" };
+  return startJob(member.id, () => runUrlImport(u));
+}
+
+/** 写真・スクリーンショットからの取り込みを受け付ける（AIが使えるときだけ。画像は端末で縮小してから送る） */
+export async function startImageImportAction(formData: FormData): Promise<StartResult> {
+  const member = await requireCookUser();
+  if (!aiAvailable()) return { ok: false, error: "写真からの取り込みは今は使えません。手入力してください" };
+  const files = formData.getAll("image").filter((v): v is File => v instanceof File && v.size > 0);
+  if (files.length === 0) return { ok: false, error: "写真を選んでください" };
+  if (files.length > MAX_IMAGES) return { ok: false, error: `写真は${MAX_IMAGES}枚までです` };
+  const images: AiImage[] = [];
+  for (const file of files) {
+    if (file.size > MAX_IMAGE_BYTES) return { ok: false, error: "写真が大きすぎます" };
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const type = detectImageType(bytes);
+    if (!type) return { ok: false, error: "画像を読み込めませんでした" };
+    images.push({ mimeType: type, base64: Buffer.from(bytes).toString("base64") });
+  }
+  return startJob(member.id, () => runImageImport(images));
+}
+
+/** 受け付けた取り込みの今の状態（本人の分だけ。RLS で強制） */
+export async function getImportJobAction(jobId: string): Promise<JobStatus> {
+  await requireCookUser();
+  if (!UUID_RE.test(String(jobId))) return { status: "failed", error: "取り込みが見つかりません" };
+  const supabase = await createClient();
+  const { data } = await supabase.from("recipe_import_jobs").select("status, result, error").eq("id", jobId).maybeSingle();
+  if (!data) return { status: "failed", error: "取り込みが見つかりません" };
+  if (data.status === "done") {
+    const r = data.result as { draft: ImportDraft; usedAi: boolean };
+    return { status: "done", ok: true, draft: r.draft, usedAi: r.usedAi };
+  }
+  if (data.status === "failed") return { status: "failed", error: (data.error as string) ?? "読み取れませんでした" };
+  return { status: "pending" };
+}
+
 export async function addIngredientAction(
   rawName: string,
   rawReading: string,

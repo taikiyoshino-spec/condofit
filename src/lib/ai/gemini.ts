@@ -5,7 +5,7 @@ import "server-only";
 
 // 「その時点で最新の Flash」を指す名前。版を決め打ちすると、提供が終わったときに動かなくなるため
 const DEFAULT_MODEL = "gemini-flash-latest";
-const TIMEOUT_MS = 45000;
+const TIMEOUT_MS = 35000;
 
 export function aiAvailable(): boolean {
   return Boolean(process.env.GEMINI_API_KEY);
@@ -27,17 +27,22 @@ export const AI_FAILURE_MESSAGE: Record<AiFailure, string> = {
   network: "AIにつながりませんでした",
 };
 
-async function call(model: string, key: string, body: string): Promise<Response> {
+async function call(model: string, key: string, body: string, timeoutMs: number): Promise<Response> {
   return fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "x-goog-api-key": key },
     body,
-    signal: AbortSignal.timeout(TIMEOUT_MS),
+    signal: AbortSignal.timeout(timeoutMs),
   });
 }
 
 /** JSONで答えてもらう（responseSchema で形を指定）。画像も一緒に渡せる。失敗したときは理由を返す */
-export async function geminiJsonResult<T>(prompt: string, schema: object, images: AiImage[] = []): Promise<AiResult<T>> {
+export async function geminiJsonResult<T>(
+  prompt: string,
+  schema: object,
+  images: AiImage[] = [],
+  timeoutMs = TIMEOUT_MS,
+): Promise<AiResult<T>> {
   const key = process.env.GEMINI_API_KEY;
   if (!key) return { ok: false, reason: "no_key" };
   const model = process.env.GEMINI_MODEL || DEFAULT_MODEL;
@@ -51,11 +56,11 @@ export async function geminiJsonResult<T>(prompt: string, schema: object, images
     generationConfig: { responseMimeType: "application/json", responseSchema: schema, temperature: 0.1 },
   });
   try {
-    let res = await call(model, key, body);
+    let res = await call(model, key, body, timeoutMs);
     // 設定したモデルの提供が終わっていたら、最新の Flash で試し直す
     if (res.status === 404 && model !== DEFAULT_MODEL) {
       console.error("gemini model not found, retry with", DEFAULT_MODEL);
-      res = await call(DEFAULT_MODEL, key, body);
+      res = await call(DEFAULT_MODEL, key, body, timeoutMs);
     }
     if (!res.ok) {
       // 原因を Vercel のログで追えるように、エラーの先頭だけ残す（キーや本文は出さない）
@@ -79,7 +84,7 @@ export async function geminiJsonResult<T>(prompt: string, schema: object, images
 }
 
 /** JSONで答えてもらう。失敗・上限到達・キー未設定は null（理由が要らないとき） */
-export async function geminiJson<T>(prompt: string, schema: object, images: AiImage[] = []): Promise<T | null> {
-  const r = await geminiJsonResult<T>(prompt, schema, images);
+export async function geminiJson<T>(prompt: string, schema: object, images: AiImage[] = [], timeoutMs = TIMEOUT_MS): Promise<T | null> {
+  const r = await geminiJsonResult<T>(prompt, schema, images, timeoutMs);
   return r.ok ? r.data : null;
 }

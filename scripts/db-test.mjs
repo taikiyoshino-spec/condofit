@@ -1056,4 +1056,14 @@ await test("家族のいつも作る人数: 初期値3人・家族の誰でも�
   await rejects(() => asE("update households set servings = 5"), /permission denied/);
 });
 
+await test("レシピの取り込みの受付: 本人だけ読める・書き込みはサーバーだけ", async () => {
+  const [{ id }] = await asService("insert into recipe_import_jobs (user_id) values ($1) returning id", [idE]);
+  await asService("update recipe_import_jobs set status = 'done', result = '{\"title\":\"カレー\"}' where id = $1", [id]);
+  const [job] = await asE("select status, result from recipe_import_jobs where id = $1", [id]);
+  assert.deepEqual([job.status, job.result.title], ["done", "カレー"]);
+  assert.equal((await as("C", "select id from recipe_import_jobs where id = $1", [id])).length, 0, "家族でも見えない");
+  await rejects(() => asE("insert into recipe_import_jobs (user_id) values ($1)", [idE]), /permission denied/);
+  await rejects(() => asE("update recipe_import_jobs set status = 'failed' where id = $1", [id]), /permission denied/);
+});
+
 console.log(`\n${passed} passed${process.exitCode ? ", some FAILED" : ""}`);

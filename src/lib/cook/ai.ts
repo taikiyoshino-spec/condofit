@@ -92,6 +92,9 @@ function toImported(r: AiRecipe | null, siteName: string | null): ImportedRecipe
   };
 }
 
+// 当てはめは補助なので短めに待つ（取り込み全体を時間内に終えるため）
+const MATCH_TIMEOUT_MS = 12000;
+
 const MATCH_SCHEMA = {
   type: "ARRAY",
   items: { type: "OBJECT", properties: { input: { type: "STRING" }, match: { type: "STRING" } }, required: ["input", "match"] },
@@ -114,7 +117,7 @@ export async function aiMatchIngredients(names: string[], masterNames: string[])
     "",
     `食材の一覧: ${masterNames.join("、")}`,
   ].join("\n");
-  const r = await geminiJson<{ input: string; match: string }[]>(prompt, MATCH_SCHEMA);
+  const r = await geminiJson<{ input: string; match: string }[]>(prompt, MATCH_SCHEMA, [], MATCH_TIMEOUT_MS);
   for (const m of r ?? []) {
     if (names.includes(m.input) && master.has(m.match)) result.set(m.input, m.match);
   }
