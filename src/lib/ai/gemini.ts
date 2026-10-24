@@ -3,8 +3,10 @@ import "server-only";
 // Google Gemini API（無料枠）の呼び出し。キーがなければ何もしない（AIなしで全機能が動く前提。RECIPE_SPEC.md D13）。
 // 無料枠では送った内容が提供元の改善に使われることがあるため、送るのはレシピ・食材名など公開情報だけにする
 
-// 「その時点で最新の Flash」を指す名前。版を決め打ちすると、提供が終わったときに動かなくなるため
-const DEFAULT_MODEL = "gemini-flash-latest";
+// 「その時点で最新の Flash-Lite」を指す名前。
+// - 版を決め打ちすると、提供が終わったときに動かなくなるため「latest」にする
+// - Flash（考えてから答える）は画像の読み取りで35秒を超えることがあったため、速い Lite にする（読み取り・当てはめには十分）
+const DEFAULT_MODEL = "gemini-flash-lite-latest";
 const TIMEOUT_MS = 35000;
 
 export function aiAvailable(): boolean {
@@ -55,6 +57,7 @@ export async function geminiJsonResult<T>(
     ],
     generationConfig: { responseMimeType: "application/json", responseSchema: schema, temperature: 0.1 },
   });
+  const started = Date.now();
   try {
     let res = await call(model, key, body, timeoutMs);
     // 設定したモデルの提供が終わっていたら、最新の Flash で試し直す
@@ -74,11 +77,13 @@ export async function geminiJsonResult<T>(
         ?.filter((p) => !p.thought)
         .map((p) => p.text ?? "")
         .join("") ?? "";
+    // かかった時間をログに残す（遅いときの原因を Vercel のログで追えるように）
+    console.log("gemini ok", model, `${Date.now() - started}ms`, images.length ? `images=${images.length}` : "text");
     if (!text) return { ok: false, reason: "empty" };
     return { ok: true, data: JSON.parse(text) as T };
   } catch (e) {
     const name = (e as Error).name;
-    console.error("gemini error", name);
+    console.error("gemini error", name, model, `${Date.now() - started}ms`);
     return { ok: false, reason: name === "TimeoutError" || name === "AbortError" ? "timeout" : name === "SyntaxError" ? "empty" : "network" };
   }
 }
