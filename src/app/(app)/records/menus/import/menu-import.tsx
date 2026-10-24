@@ -139,8 +139,64 @@ export function MenuImport({
       router.refresh();
     });
 
+  const pasteSteps = (
+    <>
+      <section className="mx-4 rounded-xl border border-border bg-surface p-4">
+        <h2 className="font-semibold">1. AIへの依頼文をコピー</h2>
+        <p className="mt-1 text-sm text-muted">
+          ふだん使っているAI（ChatGPT・Gemini など）でメニューを相談したあと、その会話に貼り付けてください。相談した内容を、このアプリで読み込める形で出してもらえます。
+          {menu ? "今のメニューと前回の記録も入っています。" : ""}
+        </p>
+        <button type="button" onClick={() => void copyPrompt()} className="mt-3 w-full rounded-lg bg-accent py-2.5 text-sm font-semibold text-accent-fg">
+          依頼文をコピー
+        </button>
+        <button type="button" onClick={() => setShowPrompt((v) => !v)} className="mt-2 text-xs text-muted">
+          {showPrompt ? "依頼文を閉じる" : "依頼文の中身を見る"}
+        </button>
+        {showPrompt && (
+          <textarea
+            readOnly
+            value={prompt}
+            rows={10}
+            aria-label="依頼文"
+            onFocus={(e) => e.target.select()}
+            className="mt-2 w-full rounded-lg border border-border bg-bg px-3 py-2 text-xs"
+          />
+        )}
+      </section>
+
+      <section className="mx-4 rounded-xl border border-border bg-surface p-4">
+        <h2 className="font-semibold">2. AIの答えを貼り付け</h2>
+        <p className="mt-1 text-sm text-muted">AIの答えを全部そのまま貼り付けて大丈夫です（説明文があっても読み取れます）。</p>
+        <textarea
+          value={answer}
+          onChange={(e) => setAnswer(e.target.value)}
+          rows={6}
+          aria-label="AIの答え"
+          className="mt-2 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm"
+        />
+        {error && <p className="mt-1 text-sm text-danger">{error}</p>}
+        <button
+          type="button"
+          disabled={!answer.trim()}
+          onClick={load}
+          className="mt-2 w-full rounded-lg border border-accent py-2.5 text-sm font-semibold text-accent disabled:opacity-50"
+        >
+          読み込む
+        </button>
+      </section>
+    </>
+  );
+
   return (
     <div className="space-y-4 pb-8">
+      {aiReady && (
+        <details className="mx-4 rounded-xl border border-border bg-surface">
+          <summary className="cursor-pointer p-4 text-sm font-medium">ふだん使っているAI（ChatGPT など）で相談する</summary>
+          <div className="space-y-4 pb-4 [&>section]:mx-0 [&>section]:border-0 [&>section]:py-0">{pasteSteps}</div>
+        </details>
+      )}
+
       {aiReady && (
         <section className="mx-4 rounded-xl border border-accent bg-surface p-4">
           <h2 className="font-semibold">{menu ? "アプリのAIに見直してもらう" : "アプリのAIに作ってもらう"}</h2>
@@ -214,104 +270,7 @@ export function MenuImport({
         </section>
       )}
 
-      {aiReady ? (
-        <details className="mx-4 rounded-xl border border-border bg-surface">
-          <summary className="cursor-pointer p-4 text-sm font-medium">ふだん使っているAI（ChatGPT など）で相談する</summary>
-          <div className="space-y-4 pb-4 [&>section]:mx-0 [&>section]:border-0 [&>section]:py-0">
-      <section className="mx-4 rounded-xl border border-border bg-surface p-4">
-        <h2 className="font-semibold">1. AIへの依頼文をコピー</h2>
-        <p className="mt-1 text-sm text-muted">
-          ふだん使っているAI（ChatGPT・Gemini など）でメニューを相談したあと、その会話に貼り付けてください。相談した内容を、このアプリで読み込める形で出してもらえます。
-          {menu ? "今のメニューと前回の記録も入っています。" : ""}
-        </p>
-        <button type="button" onClick={() => void copyPrompt()} className="mt-3 w-full rounded-lg bg-accent py-2.5 text-sm font-semibold text-accent-fg">
-          依頼文をコピー
-        </button>
-        <button type="button" onClick={() => setShowPrompt((v) => !v)} className="mt-2 text-xs text-muted">
-          {showPrompt ? "依頼文を閉じる" : "依頼文の中身を見る"}
-        </button>
-        {showPrompt && (
-          <textarea
-            readOnly
-            value={prompt}
-            rows={10}
-            aria-label="依頼文"
-            onFocus={(e) => e.target.select()}
-            className="mt-2 w-full rounded-lg border border-border bg-bg px-3 py-2 text-xs"
-          />
-        )}
-      </section>
-
-      <section className="mx-4 rounded-xl border border-border bg-surface p-4">
-        <h2 className="font-semibold">2. AIの答えを貼り付け</h2>
-        <p className="mt-1 text-sm text-muted">AIの答えを全部そのまま貼り付けて大丈夫です（説明文があっても読み取れます）。</p>
-        <textarea
-          value={answer}
-          onChange={(e) => setAnswer(e.target.value)}
-          rows={6}
-          aria-label="AIの答え"
-          className="mt-2 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm"
-        />
-        {error && <p className="mt-1 text-sm text-danger">{error}</p>}
-        <button
-          type="button"
-          disabled={!answer.trim()}
-          onClick={load}
-          className="mt-2 w-full rounded-lg border border-accent py-2.5 text-sm font-semibold text-accent disabled:opacity-50"
-        >
-          読み込む
-        </button>
-      </section>
-          </div>
-        </details>
-      ) : (
-        <>
-      <section className="mx-4 rounded-xl border border-border bg-surface p-4">
-        <h2 className="font-semibold">1. AIへの依頼文をコピー</h2>
-        <p className="mt-1 text-sm text-muted">
-          ふだん使っているAI（ChatGPT・Gemini など）でメニューを相談したあと、その会話に貼り付けてください。相談した内容を、このアプリで読み込める形で出してもらえます。
-          {menu ? "今のメニューと前回の記録も入っています。" : ""}
-        </p>
-        <button type="button" onClick={() => void copyPrompt()} className="mt-3 w-full rounded-lg bg-accent py-2.5 text-sm font-semibold text-accent-fg">
-          依頼文をコピー
-        </button>
-        <button type="button" onClick={() => setShowPrompt((v) => !v)} className="mt-2 text-xs text-muted">
-          {showPrompt ? "依頼文を閉じる" : "依頼文の中身を見る"}
-        </button>
-        {showPrompt && (
-          <textarea
-            readOnly
-            value={prompt}
-            rows={10}
-            aria-label="依頼文"
-            onFocus={(e) => e.target.select()}
-            className="mt-2 w-full rounded-lg border border-border bg-bg px-3 py-2 text-xs"
-          />
-        )}
-      </section>
-
-      <section className="mx-4 rounded-xl border border-border bg-surface p-4">
-        <h2 className="font-semibold">2. AIの答えを貼り付け</h2>
-        <p className="mt-1 text-sm text-muted">AIの答えを全部そのまま貼り付けて大丈夫です（説明文があっても読み取れます）。</p>
-        <textarea
-          value={answer}
-          onChange={(e) => setAnswer(e.target.value)}
-          rows={6}
-          aria-label="AIの答え"
-          className="mt-2 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm"
-        />
-        {error && <p className="mt-1 text-sm text-danger">{error}</p>}
-        <button
-          type="button"
-          disabled={!answer.trim()}
-          onClick={load}
-          className="mt-2 w-full rounded-lg border border-accent py-2.5 text-sm font-semibold text-accent disabled:opacity-50"
-        >
-          読み込む
-        </button>
-      </section>
-        </>
-      )}
+      {!aiReady && pasteSteps}
 
       {parsed && (
         <section ref={confirmRef} className="mx-4 scroll-mt-4 rounded-xl border border-accent bg-surface p-4">
