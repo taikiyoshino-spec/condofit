@@ -4,7 +4,7 @@ import type { Entry, ExerciseType } from "../records/format.ts";
 import { menuToJson } from "./text.ts";
 
 export const MENU_GOALS = ["筋力アップ", "引き締め・ダイエット", "体力づくり", "健康維持"] as const;
-export const MENU_MINUTES = [30, 45, 60, 90] as const;
+export const MENU_MINUTES = [15, 30, 45, 60, 90] as const;
 export const MENU_NOTE_MAX = 200;
 
 export type MenuRequest = { goal: string; minutes: number; parts: string[]; note: string };
@@ -28,6 +28,43 @@ function setText(s: Partial<Entry>): string {
   if (s.duration_min != null) parts.push(`${s.duration_min}分`);
   if (s.distance_km != null) parts.push(`${s.distance_km}km`);
   return parts.join("×") || "—";
+}
+
+/** 1種目にかける時間（分）。有酸素は10〜30分、筋トレは1種目5〜10分（セット間の休憩を含む） */
+export const CARDIO_MINUTES = { min: 10, max: 30 } as const;
+export const STRENGTH_MINUTES = { min: 5, max: 10 } as const;
+/** 合計がこれだけ超えるまでは許す（分） */
+const OVER_MINUTES = 5;
+
+/** 時間の配分の決まり（AIへの依頼文に入れる） */
+function timeRules(minutes: number): string[] {
+  return [
+    `- 時間の配分: 有酸素は1種目${CARDIO_MINUTES.min}〜${CARDIO_MINUTES.max}分、筋トレは1種目${STRENGTH_MINUTES.min}〜${STRENGTH_MINUTES.max}分（セット間の休憩を含む）で数え、合計が${minutes}分に収まるように種目の数を決める（超えない・大きく余らせない）`,
+    "- 各種目の minutes に、その種目にかける目安の時間（分）を入れる。有酸素の duration_min は minutes と同じにする",
+  ];
+}
+
+/**
+ * AIの案を時間に合わせる。1種目の時間を決まりの範囲に収め、合計が選んだ時間を超えたら後ろの種目から外す（1つは残す）。
+ * 有酸素の時間は記録の値（duration_min）を正にする
+ */
+export function fitToTime<T extends { type: ExerciseType; minutes: number | null; sets: Partial<Entry>[] }>(
+  items: T[],
+  minutes: number,
+): (T & { minutes: number })[] {
+  const clamp = (n: number, r: { min: number; max: number }) => Math.min(r.max, Math.max(r.min, Math.round(n)));
+  const fitted = items.map((it) => {
+    if (it.type === "cardio") {
+      const total = it.sets.reduce((sum, x) => sum + (x.duration_min ?? 0), 0);
+      const m = clamp(total || it.minutes || 15, CARDIO_MINUTES);
+      // 1セットの有酸素は時間を決まりの範囲に合わせる（複数セットはそのまま）
+      const sets = it.sets.length <= 1 ? [{ ...(it.sets[0] ?? {}), duration_min: m }] : it.sets;
+      return { ...it, sets, minutes: m };
+    }
+    return { ...it, minutes: clamp(it.minutes ?? it.sets.length * 2, STRENGTH_MINUTES) };
+  });
+  while (fitted.length > 1 && fitted.reduce((sum, it) => sum + it.minutes, 0) > minutes + OVER_MINUTES) fitted.pop();
+  return fitted;
 }
 
 /** AIへの依頼文。名前は渡さず、目的と使える種目・最近の記録の数字だけを渡す */
@@ -63,6 +100,7 @@ export function buildGeneratePrompt({
     "【作り方】",
     "- 使える種目の中から選ぶ。一覧にない種目は入れない",
     "- 重量系は weight_kg（kg）と reps（回）、有酸素は duration_min（分）と distance_km（km、なければ省く）。セットの数だけ sets に並べる",
+    ...timeRules(request.minutes),
     "- 最近の記録がある種目は、その重さ・回数を目安にする（同じか少し上）",
     "- 最近の記録がない重量系の種目は weight_kg を入れず、reps だけにする（重さは本人がその場で決める）",
     "- name はメニューの短い名前（20文字くらいまで）",
@@ -136,10 +174,12 @@ export function buildTodayPrompt({
     "【作り方】",
     "- 使える種目の中から選ぶ。一覧にない種目は入れない",
     "- 重量系は weight_kg（kg）と reps（回）、有酸素は duration_min（分）と distance_km（km、なければ省く）。セットの数だけ sets に並べる",
+    ...timeRules(request.minutes),
     "- 最近の記録がある種目は、その重さ・回数と今日の調子から決める",
     "- 最近の記録がない重量系の種目は weight_kg を入れず、reps だけにする（重さは本人がその場で決める）",
     "- menus に案を並べる。name はその案の短い名前（「背中と脚の日」「軽めの全身」など、20文字くらいまで。案ごとに違う名前）",
-    "- comment は、その案のねらいとコツを2文で（120文字以内）。けが・病気の助言はしない",
+    "- reason は、その組み合わせを選んだ理由を端的に1文で（40文字以内。例「脚が10日空いているので脚を中心に」「疲れぎみなので軽めの全身」）",
+    "- けが・病気の助言はしない",
   );
   return lines.join("\n");
 }
@@ -148,6 +188,19 @@ function exerciseLine(e: GenerateExercise): string {
   const kind = e.type === "cardio" ? "有酸素" : e.excludesBar ? "重量系・重さはバーを除いた値" : "重量系";
   return `- ${e.name}（${[...new Set([e.part, kind].filter(Boolean))].join("・")}）`;
 }
+
+const SETS_SCHEMA = {
+  type: "ARRAY",
+  items: {
+    type: "OBJECT",
+    properties: {
+      weight_kg: { type: "NUMBER" },
+      reps: { type: "INTEGER" },
+      duration_min: { type: "NUMBER" },
+      distance_km: { type: "NUMBER" },
+    },
+  },
+};
 
 /** Gemini に渡す答えの形 */
 export const GENERATE_SCHEMA = {
@@ -161,18 +214,8 @@ export const GENERATE_SCHEMA = {
         type: "OBJECT",
         properties: {
           exercise: { type: "STRING" },
-          sets: {
-            type: "ARRAY",
-            items: {
-              type: "OBJECT",
-              properties: {
-                weight_kg: { type: "NUMBER" },
-                reps: { type: "INTEGER" },
-                duration_min: { type: "NUMBER" },
-                distance_km: { type: "NUMBER" },
-              },
-            },
-          },
+          minutes: { type: "INTEGER" },
+          sets: SETS_SCHEMA,
         },
         required: ["exercise", "sets"],
       },
@@ -181,9 +224,29 @@ export const GENERATE_SCHEMA = {
   required: ["name", "items"],
 };
 
-/** 今日のメニュー（案をいくつか）の答えの形 */
+/** 今日のメニュー（案をいくつか）の答えの形。案ごとに選んだ理由、種目ごとに目安の時間 */
 export const TODAY_SCHEMA = {
   type: "OBJECT",
-  properties: { menus: { type: "ARRAY", items: GENERATE_SCHEMA } },
+  properties: {
+    menus: {
+      type: "ARRAY",
+      items: {
+        type: "OBJECT",
+        properties: {
+          name: { type: "STRING" },
+          reason: { type: "STRING" },
+          items: {
+            type: "ARRAY",
+            items: {
+              type: "OBJECT",
+              properties: { exercise: { type: "STRING" }, minutes: { type: "INTEGER" }, sets: SETS_SCHEMA },
+              required: ["exercise", "minutes", "sets"],
+            },
+          },
+        },
+        required: ["name", "reason", "items"],
+      },
+    },
+  },
   required: ["menus"],
 };

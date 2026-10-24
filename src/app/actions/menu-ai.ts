@@ -10,6 +10,7 @@ import {
   cleanMenuRequest,
   cleanTodayRequest,
   GENERATE_SCHEMA,
+  fitToTime,
   TODAY_PROPOSALS,
   TODAY_SCHEMA,
 } from "@/lib/menus/generate";
@@ -65,7 +66,8 @@ export async function generateMenuAction(raw: unknown, menuId: string | null): P
   return { ok: true, menu: parsed.menu, comment: comment ? [...comment].slice(0, 200).join("") : null };
 }
 
-export type TodayProposal = { menu: MenuForEditor; comment: string | null; dropped: string[] };
+/** reason: AIが選んだ理由。minutes: 種目ごとの目安の時間（menu.items と同じ順） */
+export type TodayProposal = { menu: MenuForEditor; reason: string | null; minutes: number[]; dropped: string[] };
 export type TodayMenuResult = { ok: true; proposals: TodayProposal[] } | { ok: false; error: string };
 
 /**
@@ -103,7 +105,8 @@ export async function generateTodayMenuAction(raw: unknown): Promise<TodayMenuRe
       .map((p) => ({ name: p.name, sets: p.sets, daysAgo: p.lastDate ? Math.round((Date.parse(today) - Date.parse(p.lastDate)) / 86400e3) : null })),
   });
 
-  const r = await geminiJsonResult<{ menus?: { name?: string; comment?: string; items?: unknown }[] }>(prompt, TODAY_SCHEMA, {
+  type RawItem = { exercise?: unknown; minutes?: unknown; sets?: unknown };
+  const r = await geminiJsonResult<{ menus?: { name?: string; reason?: string; items?: RawItem[] }[] }>(prompt, TODAY_SCHEMA, {
     feature: "fit_today",
     timeoutMs: 45000,
     temperature: 0.8,
@@ -114,18 +117,22 @@ export async function generateTodayMenuAction(raw: unknown): Promise<TodayMenuRe
   for (const m of (Array.isArray(r.data.menus) ? r.data.menus : []).slice(0, TODAY_PROPOSALS)) {
     const parsed = parseMenuText(JSON.stringify({ name: m?.name, items: m?.items }));
     if (!parsed.ok) continue;
-    const items: MenuForEditor["items"] = [];
+    const matched: (MenuForEditor["items"][number] & { minutes: number | null })[] = [];
     const dropped: string[] = [];
-    for (const it of parsed.menu.items) {
+    parsed.menu.items.forEach((it, i) => {
       const hit = matchExercise(it.exercise, catalog.exercises);
-      if (hit) items.push({ exerciseId: hit.id, name: hit.name, type: hit.type, sets: it.sets });
+      const minutes = Number(m?.items?.[i]?.minutes);
+      if (hit) matched.push({ exerciseId: hit.id, name: hit.name, type: hit.type, sets: it.sets, minutes: Number.isFinite(minutes) && minutes > 0 ? minutes : null });
       else dropped.push(it.exercise);
-    }
-    if (items.length === 0) continue;
-    const comment = String(m?.comment ?? "").trim();
+    });
+    // AIが時間を守らないこともあるので、アプリでも1種目の時間と合計を合わせる
+    const fitted = fitToTime(matched, request.minutes);
+    if (fitted.length === 0) continue;
+    const reason = String(m?.reason ?? "").trim();
     proposals.push({
-      menu: { id: null, name: parsed.menu.name, items },
-      comment: comment ? [...comment].slice(0, 200).join("") : null,
+      menu: { id: null, name: parsed.menu.name, items: fitted.map(({ minutes: _, ...it }) => it) },
+      reason: reason ? [...reason].slice(0, 80).join("") : null,
+      minutes: fitted.map((it) => it.minutes),
       dropped,
     });
   }

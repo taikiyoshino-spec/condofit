@@ -111,16 +111,27 @@ export function TodayAi({
         <p className="px-4 pb-3 text-sm text-muted">
           {proposals.length > 1 ? `AIが${proposals.length}つの案を作りました。やりたい案を選んでください。` : "AIが案を作りました。"}
         </p>
-        {proposals.map(({ menu, comment, dropped }, i) => (
+        {proposals.map(({ menu, reason, minutes: itemMinutes, dropped }, i) => (
           <section key={i} className="mx-4 mb-3 rounded-xl border border-border bg-surface p-4">
-            <p className="text-xs font-medium text-accent">案{i + 1}</p>
+            <div className="flex items-baseline justify-between gap-2">
+              <p className="text-xs font-medium text-accent">案{i + 1}</p>
+              <p className="text-xs text-muted">約{itemMinutes.reduce((sum, m) => sum + m, 0)}分</p>
+            </div>
             <h2 className="text-lg font-semibold">{menu.name}</h2>
-            {comment && <p className="mt-1 text-sm text-muted">{comment}</p>}
+            {reason && (
+              <p className="mt-1 text-sm">
+                <span className="mr-1 rounded bg-bg px-1.5 py-0.5 text-xs text-muted">理由</span>
+                {reason}
+              </p>
+            )}
             <ul className="mt-2 divide-y divide-border">
               {menu.items.map((it, k) => (
-                <li key={k} className="flex items-baseline justify-between gap-3 py-2">
-                  <span className="min-w-0 font-medium">{it.name}</span>
-                  <span className="shrink-0 text-right text-sm text-muted">{it.sets.length ? it.sets.map(setText).join("、") : "セットなし"}</span>
+                <li key={k} className="py-2">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <span className="min-w-0 font-medium">{it.name}</span>
+                    <span className="shrink-0 text-xs text-muted">約{itemMinutes[k]}分</span>
+                  </div>
+                  <p className="text-sm text-muted">{it.sets.length ? it.sets.map(setText).join("、") : "セットなし"}</p>
                 </li>
               ))}
             </ul>

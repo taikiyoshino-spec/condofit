@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildGeneratePrompt, buildTodayPrompt, cleanMenuRequest, cleanTodayRequest } from "../src/lib/menus/generate.ts";
+import { buildGeneratePrompt, buildTodayPrompt, cleanMenuRequest, cleanTodayRequest, fitToTime } from "../src/lib/menus/generate.ts";
 
 test("メニュー作成の依頼: 目的・時間は決まった中から、部位はマスタの部位だけ、希望は200文字まで", () => {
   const parts = ["胸", "脚"];
@@ -51,4 +51,17 @@ test("今日のメニューの依頼: 調子・部位・時間。部位がなけ
   assert.match(p, /- 胸: 12セット・最後は2日前/);
   assert.match(p, /- 脚: 0セット・4週間やっていない/);
   assert.match(p, /- チェストプレス（胸・重量系）/);
+  assert.match(p, /有酸素は1種目10〜30分、筋トレは1種目5〜10分.*合計が30分に収まる/);
+  assert.match(p, /reason は、その組み合わせを選んだ理由を端的に/);
+});
+
+test("時間に合わせる: 有酸素は10〜30分、筋トレは1種目5〜10分。合計が超えたら後ろから外す", () => {
+  const w = (minutes: number | null, sets = 3) => ({ type: "weight" as const, minutes, sets: Array.from({ length: sets }, () => ({ weight_kg: 40, reps: 10 })) });
+  const c = (duration: number | null, minutes: number | null = null) => ({ type: "cardio" as const, minutes, sets: [{ duration_min: duration }] });
+  assert.deepEqual(fitToTime([w(3), w(15), w(null, 4)], 60).map((x) => x.minutes), [5, 10, 8], "筋トレは5〜10分。なければセット数×2分");
+  const cardio = fitToTime([c(45), c(5), c(null, 20)], 90);
+  assert.deepEqual(cardio.map((x) => x.minutes), [30, 10, 20], "有酸素は10〜30分");
+  assert.deepEqual(cardio.map((x) => x.sets[0].duration_min), [30, 10, 20], "記録する時間も合わせる");
+  assert.deepEqual(fitToTime([w(10), w(10), c(20)], 15).map((x) => x.minutes), [10, 10], "15分なら20分まで（5分の超過は許す）");
+  assert.equal(fitToTime([c(30)], 15).length, 1, "1つは残す");
 });
