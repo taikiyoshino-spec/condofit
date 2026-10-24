@@ -17,7 +17,7 @@ export function aiAvailable(): boolean {
 export type AiImage = { mimeType: string; base64: string };
 
 /** どの機能から呼んだか（管理画面の利用状況で分けて数える） */
-export type AiFeature = "cook_recipe_text" | "cook_recipe_image" | "cook_match" | "fit_review" | "fit_menu";
+export type AiFeature = "cook_recipe_text" | "cook_recipe_image" | "cook_match" | "fit_review" | "fit_menu" | "fit_today";
 
 /** 失敗の理由（画面に出す。キーや送った内容は含めない） */
 export type AiFailure = "no_key" | "timeout" | "quota" | "model" | "rejected" | "empty" | "network";

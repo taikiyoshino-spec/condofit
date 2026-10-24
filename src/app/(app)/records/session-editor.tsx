@@ -49,7 +49,8 @@ let nextKey = 1;
 const newKey = () => nextKey++;
 
 export type MenuForEditor = {
-  id: string;
+  /** 保存したメニューでなければ null（AIと相談して作った今日のメニューなど） */
+  id: string | null;
   name: string;
   items: { exerciseId: string; name: string; type: ExerciseType; sets: Partial<Entry>[] }[];
 };

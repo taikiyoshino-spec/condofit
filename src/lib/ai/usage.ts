@@ -7,6 +7,7 @@ export const FEATURE_LABEL: Record<string, string> = {
   cook_match: "材料の当てはめ",
   fit_review: "月のふりかえり",
   fit_menu: "メニュー作成",
+  fit_today: "今日のメニュー（記録を始める）",
 };
 
 export type UsageRow = { createdAt: string; feature: string; ok: boolean; reason: string | null; totalTokens: number | null };

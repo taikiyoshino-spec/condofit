@@ -57,10 +57,7 @@ export function buildGeneratePrompt({
     for (const r of recent) lines.push(`- ${r.name}: ${r.sets.map(setText).join("、")}`);
   }
   lines.push("", "【使える種目】（このジムにある種目。exercise には必ずこの名前をそのまま書く）");
-  for (const e of exercises) {
-    const kind = e.type === "cardio" ? "有酸素" : e.excludesBar ? "重量系・重さはバーを除いた値" : "重量系";
-    lines.push(`- ${e.name}（${[...new Set([e.part, kind].filter(Boolean))].join("・")}）`);
-  }
+  for (const e of exercises) lines.push(exerciseLine(e));
   lines.push(
     "",
     "【作り方】",
@@ -72,6 +69,80 @@ export function buildGeneratePrompt({
     "- comment は、このメニューのねらいとコツを2文で（120文字以内）。けが・病気の助言はしない",
   );
   return lines.join("\n");
+}
+
+/** 今日の調子（記録を始めるときにAIと相談する） */
+export const CONDITIONS = ["絶好調", "ふつう", "疲れぎみ"] as const;
+const CONDITION_RULE: Record<(typeof CONDITIONS)[number], string> = {
+  絶好調: "調子がいいので、前回より少し重く、または回数・セットを少し多くしてよい",
+  ふつう: "前回と同じくらいの重さ・回数にする",
+  疲れぎみ: "疲れぎみなので、前回より軽め・少なめにして、種目も少なくする",
+};
+
+export type TodayRequest = { condition: (typeof CONDITIONS)[number]; minutes: number; parts: string[]; note: string };
+/** 部位ごとの直近4週間のセット数と、最後にやってから何日か（AIが「最近やっていない部位」を選べるように） */
+export type PartRecency = { name: string; sets: number; daysAgo: number | null };
+
+/** 画面から来た今日の相談を確かめる */
+export function cleanTodayRequest(raw: unknown, partNames: string[]): TodayRequest | null {
+  const r = (raw ?? {}) as Record<string, unknown>;
+  const condition = String(r.condition ?? "") as TodayRequest["condition"];
+  const minutes = Number(r.minutes);
+  if (!CONDITIONS.includes(condition) || !(MENU_MINUTES as readonly number[]).includes(minutes)) return null;
+  const parts = Array.isArray(r.parts) ? [...new Set(r.parts.map(String))].filter((p) => partNames.includes(p)) : [];
+  const note = [...String(r.note ?? "").trim()].slice(0, MENU_NOTE_MAX).join("");
+  return { condition, minutes, parts, note };
+}
+
+/** 今日のメニューの依頼文。名前は渡さず、調子・希望・最近の記録の数字だけを渡す */
+export function buildTodayPrompt({
+  request,
+  exercises,
+  recent,
+  parts,
+}: {
+  request: TodayRequest;
+  exercises: GenerateExercise[];
+  recent: { name: string; sets: Partial<Entry>[]; daysAgo?: number | null }[];
+  parts: PartRecency[];
+}): string {
+  const lines: string[] = [
+    "これからジムでトレーニングをする人の、今日のメニューを1つ作ってください。",
+    "",
+    "【今日】",
+    `- 調子: ${request.condition}（${CONDITION_RULE[request.condition]}）`,
+    `- 時間: ${request.minutes}分くらい（準備・休憩を含む）`,
+    request.parts.length
+      ? `- やりたい部位: ${request.parts.join("・")}`
+      : "- やりたい部位: おまかせ（下の「部位ごとの最近」を見て、しばらくやっていない部位を中心に。前回と同じ部位ばかりにならないように）",
+  ];
+  if (request.note) lines.push(`- そのほか: ${request.note}`);
+  if (parts.length) {
+    lines.push("", "【部位ごとの最近（直近4週間）】");
+    for (const p of parts) lines.push(`- ${p.name}: ${p.sets}セット・${p.daysAgo === null ? "4週間やっていない" : p.daysAgo === 0 ? "最後は今日" : `最後は${p.daysAgo}日前`}`);
+  }
+  if (recent.length) {
+    lines.push("", "【最近の記録（各種目の前回）】");
+    for (const r of recent) lines.push(`- ${r.name}: ${r.sets.map(setText).join("、")}${r.daysAgo != null ? `（${r.daysAgo}日前）` : ""}`);
+  }
+  lines.push("", "【使える種目】（このジムにある種目。exercise には必ずこの名前をそのまま書く）");
+  for (const e of exercises) lines.push(exerciseLine(e));
+  lines.push(
+    "",
+    "【作り方】",
+    "- 使える種目の中から選ぶ。一覧にない種目は入れない",
+    "- 重量系は weight_kg（kg）と reps（回）、有酸素は duration_min（分）と distance_km（km、なければ省く）。セットの数だけ sets に並べる",
+    "- 最近の記録がある種目は、その重さ・回数と今日の調子から決める",
+    "- 最近の記録がない重量系の種目は weight_kg を入れず、reps だけにする（重さは本人がその場で決める）",
+    "- name は今日のメニューの短い名前（「背中と脚の日」など、20文字くらいまで）",
+    "- comment は、今日のねらいとコツを2文で（120文字以内）。けが・病気の助言はしない",
+  );
+  return lines.join("\n");
+}
+
+function exerciseLine(e: GenerateExercise): string {
+  const kind = e.type === "cardio" ? "有酸素" : e.excludesBar ? "重量系・重さはバーを除いた値" : "重量系";
+  return `- ${e.name}（${[...new Set([e.part, kind].filter(Boolean))].join("・")}）`;
 }
 
 /** Gemini に渡す答えの形 */

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireMember } from "@/lib/auth/session";
 import { listMyMenus } from "@/lib/menus/queries";
 import { PageHeader, Section } from "@/components/page";
+import { aiAvailable } from "@/lib/ai/gemini";
 
 /** 記録の始め方を選ぶ: メニューから / 自由に */
 export default async function StartRecordPage() {
@@ -10,6 +11,18 @@ export default async function StartRecordPage() {
   return (
     <>
       <PageHeader title="記録を始める" back="/records" />
+
+      {aiAvailable() && (
+        <Link href="/records/ai" className="mx-4 mb-4 flex items-center gap-3 rounded-xl border border-accent bg-surface p-4">
+          <span className="min-w-0 flex-1">
+            <span className="block font-semibold">AIと相談して始める</span>
+            <span className="block text-xs text-muted">今日の調子とやりたい部位を選ぶと、最近の記録から今日のメニューを作ります</span>
+          </span>
+          <span className="text-accent" aria-hidden>
+            ›
+          </span>
+        </Link>
+      )}
 
       <Section title="メニューから始める">
         {menus.length === 0 ? (
