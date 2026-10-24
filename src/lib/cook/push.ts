@@ -3,6 +3,11 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { sendPush } from "@/lib/push";
 import { formatNotification } from "@/lib/notifications/format";
 
+/** CondoCook のプッシュ通知の中身。見出しを「CondoCook」にして、CondoFit の通知と見分けられるようにする */
+function cookMessage(f: { text: string; sub?: string; href: string }, tag: string) {
+  return { title: "CondoCook", body: [f.text, f.sub].filter(Boolean).join("\n"), url: f.href, tag };
+}
+
 type CookType = "cook_cooked" | "cook_comment" | "cook_favorite" | "cook_new_recipe";
 const CATEGORY = {
   cook_cooked: "cook_cooked",
@@ -31,7 +36,7 @@ export async function pushCookNotifications(actorId: string, actorName: string, 
   await sendPush(
     [...new Set(data.map((n) => n.recipient_user_id as string))],
     CATEGORY[type],
-    { title: f.text, body: f.sub ?? "", url: f.href, tag: `${type}-${recipeId}` },
+    cookMessage(f, `${type}-${recipeId}`),
   );
 }
 
@@ -57,7 +62,7 @@ export async function flushShoppingNotifications(): Promise<number> {
   }
   for (const b of batches.values()) {
     const f = formatNotification({ id: "", type: "cook_shopping", actorName: names.get(b.actorId) ?? null, payload: b.payload, createdAt: "", readAt: null });
-    await sendPush(b.recipients, "cook_shopping", { title: f.text, body: f.sub ?? "", url: f.href, tag: "cook-shopping" });
+    await sendPush(b.recipients, "cook_shopping", cookMessage(f, "cook-shopping"));
   }
   return batches.size;
 }

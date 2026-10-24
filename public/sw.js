@@ -1,4 +1,4 @@
-// CondoFit Service Worker: Web Push の受信と通知タップ時の遷移のみ（オフラインキャッシュはしない）
+// CondoFit・CondoCook 共通の Service Worker: Web Push の受信と通知タップ時の遷移のみ（オフラインキャッシュはしない）
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim()));
 
@@ -9,11 +9,14 @@ self.addEventListener("push", (event) => {
   } catch {
     data = { body: event.data ? event.data.text() : "" };
   }
+  // CondoCook の通知（/cook へ移るもの）は CondoCook のアイコンで出す
+  const cook = typeof data.url === "string" && data.url.startsWith("/cook");
+  const icon = cook ? "/icons/cook-192.png" : "/icons/icon-192.png";
   event.waitUntil(
-    self.registration.showNotification(data.title || "CondoFit", {
+    self.registration.showNotification(data.title || (cook ? "CondoCook" : "CondoFit"), {
       body: data.body || "",
-      icon: "/icons/icon-192.png",
-      badge: "/icons/icon-192.png",
+      icon,
+      badge: icon,
       tag: data.tag,
       data: { url: data.url || "/" },
     }),
