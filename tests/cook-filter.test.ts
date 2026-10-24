@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { filterRecipes } from "../src/lib/cook/filter.ts";
+import { filterRecipes, parseFeatureKeys, recipeFeatures, toggleFeatureKey } from "../src/lib/cook/filter.ts";
 
 const list = [
   { id: "1", title: "親子丼", ownerId: "me", categoryId: "rice", tags: ["簡単"], ingredientNames: ["鶏もも肉", "卵", "玉ねぎ"] },
@@ -38,12 +38,22 @@ test("filterRecipes: お気に入り・作りたいの一覧（onlyIds）", () =
   assert.equal(filterRecipes(rows, opt).length, 2);
 });
 
-test("filterRecipes: 子供向けだけ", () => {
+test("filterRecipes: 特徴（子供向け・包丁不要・フライパン不要）で絞り込む", () => {
   const rows = [
     { id: "a", title: "カレー", ownerId: "me", categoryId: null, tags: ["子供向け"], ingredientNames: [] },
-    { id: "b", title: "麻婆豆腐", ownerId: "me", categoryId: null, tags: ["辛い"], ingredientNames: [] },
+    { id: "b", title: "レンジ蒸し", ownerId: "me", categoryId: null, tags: ["子供向け", "包丁不要", "フライパン不要"], ingredientNames: [] },
+    { id: "c", title: "麻婆豆腐", ownerId: "me", categoryId: null, tags: ["辛い"], ingredientNames: [] },
   ];
   const opt = { scope: "all" as const, q: "", categoryId: null, myId: "me", householdIds: ["me"] };
-  assert.deepEqual(filterRecipes(rows, { ...opt, kids: true }).map((r) => r.id), ["a"]);
-  assert.equal(filterRecipes(rows, opt).length, 2);
+  assert.deepEqual(filterRecipes(rows, { ...opt, features: ["kids"] }).map((r) => r.id), ["a", "b"]);
+  assert.deepEqual(filterRecipes(rows, { ...opt, features: ["kids", "noknife"] }).map((r) => r.id), ["b"], "すべて付いているもの");
+  assert.equal(filterRecipes(rows, opt).length, 3);
+});
+
+test("parseFeatureKeys / toggleFeatureKey / recipeFeatures", () => {
+  assert.deepEqual(parseFeatureKeys("nopan,xx,kids"), ["kids", "nopan"], "知らないものは除き、決まった順に");
+  assert.deepEqual(parseFeatureKeys(undefined), []);
+  assert.equal(toggleFeatureKey(["kids"], "nopan"), "kids,nopan");
+  assert.equal(toggleFeatureKey(["kids"], "kids"), null);
+  assert.deepEqual(recipeFeatures({ tags: ["包丁不要", "簡単"] }).map((f) => f.tag), ["包丁不要"]);
 });

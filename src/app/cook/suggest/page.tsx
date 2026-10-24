@@ -2,7 +2,7 @@ import Link from "next/link";
 import { requireCookUser } from "@/lib/auth/session";
 import { listCategories, listPantry, listRecipes, myStapleIds, recentHouseholdCookIds } from "@/lib/cook/queries";
 import { suggestRecipes } from "@/lib/cook/pantry";
-import { isKidsRecipe } from "@/lib/cook/filter";
+import { FEATURES, parseFeatureKeys, recipeFeatures, toggleFeatureKey, type FeatureKey } from "@/lib/cook/filter";
 import { todayJst } from "@/lib/date";
 import { PageHeader } from "@/components/page";
 import { RecipeThumb } from "../recipe-thumb";
@@ -12,13 +12,14 @@ const LIMIT = 50;
 
 /** 今ある食材で作れるレシピ（D17） */
 export default async function SuggestPage({ searchParams }: PageProps<"/cook/suggest">) {
-  const { cat, kids: kidsParam } = await searchParams;
-  const categoryId = typeof cat === "string" ? cat : null;
-  const kids = kidsParam === "1";
-  const href = (c: string | null, k: boolean) => {
+  const sp = await searchParams;
+  const categoryId = typeof sp.cat === "string" ? sp.cat : null;
+  // 特徴（子供向け・包丁不要など）。前の ?kids=1 も受ける
+  const features = parseFeatureKeys(sp.f ?? (sp.kids === "1" ? "kids" : undefined));
+  const href = (c: string | null, f: string | null) => {
     const params = new URLSearchParams();
     if (c) params.set("cat", c);
-    if (k) params.set("kids", "1");
+    if (f) params.set("f", f);
     const q = params.toString();
     return q ? `/cook/suggest?${q}` : "/cook/suggest";
   };
@@ -32,7 +33,7 @@ export default async function SuggestPage({ searchParams }: PageProps<"/cook/sug
   ]);
   const today = todayJst();
   const suggestions = suggestRecipes(
-    recipes.filter((r) => (!categoryId || r.categoryId === categoryId) && (!kids || isKidsRecipe(r))),
+    recipes.filter((r) => (!categoryId || r.categoryId === categoryId) && hasAll(r, features)),
     { pantry, staples, recentIds, today },
   ).slice(0, LIMIT);
 
@@ -40,15 +41,21 @@ export default async function SuggestPage({ searchParams }: PageProps<"/cook/sug
     <>
       <PageHeader title="今日なに作る？" />
       <div className="mb-3 flex gap-1.5 overflow-x-auto px-4 pb-1 text-xs">
+        {FEATURES.map((f) => {
+          const on = features.includes(f.key);
+          return (
+            <Link
+              key={f.key}
+              href={href(categoryId, toggleFeatureKey(features, f.key))}
+              aria-pressed={on}
+              className={`shrink-0 rounded-full border px-3 py-1 ${on ? "border-accent bg-accent text-accent-fg" : "border-accent text-accent"}`}
+            >
+              {f.tag}
+            </Link>
+          );
+        })}
         <Link
-          href={href(categoryId, !kids)}
-          aria-pressed={kids}
-          className={`shrink-0 rounded-full border px-3 py-1 ${kids ? "border-accent bg-accent text-accent-fg" : "border-accent text-accent"}`}
-        >
-          子供向け
-        </Link>
-        <Link
-          href={href(null, kids)}
+          href={href(null, features.length ? features.join(",") : null)}
           className={`shrink-0 rounded-full border px-3 py-1 ${!categoryId ? "border-accent bg-accent text-accent-fg" : "border-border"}`}
         >
           すべて
@@ -56,7 +63,7 @@ export default async function SuggestPage({ searchParams }: PageProps<"/cook/sug
         {categories.map((c) => (
           <Link
             key={c.id}
-            href={href(c.id, kids)}
+            href={href(c.id, features.length ? features.join(",") : null)}
             className={`shrink-0 rounded-full border px-3 py-1 ${categoryId === c.id ? "border-accent bg-accent text-accent-fg" : "border-border"}`}
           >
             {c.name}
@@ -99,7 +106,11 @@ export default async function SuggestPage({ searchParams }: PageProps<"/cook/sug
                     {recipe.cookedCount > 0 && <span>作った {recipe.cookedCount}</span>}
                     {recipe.favoriteCount > 0 && <span>♥ {recipe.favoriteCount}</span>}
                     {recent && <span>最近作った</span>}
-                    {isKidsRecipe(recipe) && <span className="font-medium text-accent">子供向け</span>}
+                    {recipeFeatures(recipe).map((f) => (
+                      <span key={f.key} className="font-medium text-accent">
+                        {f.tag}
+                      </span>
+                    ))}
                   </span>
                 </span>
               </Link>
@@ -112,4 +123,10 @@ export default async function SuggestPage({ searchParams }: PageProps<"/cook/sug
       </p>
     </>
   );
+}
+
+/** 選んだ特徴がすべて付いているか */
+function hasAll(r: { tags: string[] }, keys: FeatureKey[]) {
+  const tags = recipeFeatures(r).map((f) => f.key);
+  return keys.every((k) => tags.includes(k));
 }

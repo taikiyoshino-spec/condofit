@@ -9,7 +9,7 @@ import { BottomSheet } from "@/components/bottom-sheet";
 import { showToast } from "@/components/toaster";
 import { resizeToJpeg } from "@/lib/client/resize-image";
 import { NeedMark } from "@/components/form";
-import { KIDS_TAG } from "@/lib/cook/filter";
+import { FEATURES } from "@/lib/cook/filter";
 import { moveKeyTo } from "@/lib/client/sort";
 import { useLongPressSort } from "@/lib/client/use-long-press-sort";
 import {
@@ -464,17 +464,27 @@ export function RecipeEditor({
             </select>
           </label>
         </div>
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={parseTags(form.tags).includes(KIDS_TAG)}
-            onChange={(e) => set("tags", toggleTagText(form.tags, KIDS_TAG, e.target.checked))}
-            className="h-5 w-5 accent-[var(--accent)]"
-          />
-          <span>
-            子供向け<span className="ml-1 text-xs text-muted">（子どもが食べやすい。一覧・提案で絞り込めます）</span>
-          </span>
-        </label>
+        <fieldset className="space-y-1.5">
+          <legend className="text-sm font-medium">
+            特徴
+            <NeedMark need="optional" />
+            <span className="ml-1 text-xs font-normal text-muted">一覧・提案で絞り込めます</span>
+          </legend>
+          {FEATURES.map((f) => (
+            <label key={f.key} className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={parseTags(form.tags).includes(f.tag)}
+                onChange={(e) => set("tags", toggleTagText(form.tags, f.tag, e.target.checked))}
+                className="h-5 w-5 accent-[var(--accent)]"
+              />
+              <span>
+                {f.tag}
+                <span className="ml-1 text-xs text-muted">（{f.hint}）</span>
+              </span>
+            </label>
+          ))}
+        </fieldset>
         <label className="block space-y-1">
           <span className="text-sm font-medium">
             タグ（「、」区切り）
