@@ -166,7 +166,9 @@ export function TodayAi({
           </div>
         </fieldset>
         <fieldset className="mt-4">
-          <legend className="text-sm font-medium">やりたい部位はある？</legend>
+          <legend className="text-sm font-medium">
+            やりたい部位はある？ <span className="text-xs font-normal text-muted">（いくつでも選べます）</span>
+          </legend>
           <div className="mt-1.5 flex flex-wrap gap-2">
             <button type="button" aria-pressed={parts.length === 0} onClick={() => setParts([])} className={chip(parts.length === 0)}>
               おまかせ
