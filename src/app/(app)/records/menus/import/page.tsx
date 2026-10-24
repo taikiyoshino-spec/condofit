@@ -3,6 +3,10 @@ import { getMyMenu } from "@/lib/menus/queries";
 import { getCatalog, getMyExerciseHistory } from "@/lib/records/queries";
 import { PageHeader } from "@/components/page";
 import { MenuImport } from "./menu-import";
+import { aiAvailable } from "@/lib/ai/gemini";
+
+// アプリのAIにメニューを作ってもらうときに、AIの返事を待つため
+export const maxDuration = 60;
 
 const UUID_RE = /^[0-9a-f-]{36}$/i;
 
@@ -22,7 +26,7 @@ export default async function MenuImportPage({ searchParams }: PageProps<"/recor
   return (
     <>
       <PageHeader title={menu ? "AIに相談して直す" : "AIに相談して作る"} back={menu ? `/records/menus/${menu.id}` : "/records/menus"} />
-      <MenuImport catalog={catalog} menu={menu} recent={recent} />
+      <MenuImport catalog={catalog} menu={menu} recent={recent} aiReady={aiAvailable()} />
     </>
   );
 }

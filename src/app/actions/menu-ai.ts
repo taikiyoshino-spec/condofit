@@ -1,0 +1,54 @@
+"use server";
+
+import { requireMember } from "@/lib/auth/session";
+import { AI_FAILURE_MESSAGE, geminiJsonResult } from "@/lib/ai/gemini";
+import { getCatalog, getMyExerciseHistory } from "@/lib/records/queries";
+import { getMyMenu } from "@/lib/menus/queries";
+import { buildGeneratePrompt, cleanMenuRequest, GENERATE_SCHEMA } from "@/lib/menus/generate";
+import { parseMenuText, type TextMenu } from "@/lib/menus/text";
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** 依頼文に入れる最近の種目の数 */
+const RECENT_LIMIT = 25;
+
+export type GenerateMenuResult = { ok: true; menu: TextMenu; comment: string | null } | { ok: false; error: string };
+
+/** アプリのAIにメニューを作ってもらう（保存はしない。画面で確認してから「AIに相談して作る」と同じ流れで登録する） */
+export async function generateMenuAction(raw: unknown, menuId: string | null): Promise<GenerateMenuResult> {
+  const member = await requireMember();
+  const [catalog, history, current] = await Promise.all([
+    getCatalog(),
+    getMyExerciseHistory(member.id),
+    menuId && UUID_RE.test(menuId) ? getMyMenu(member.id, menuId) : Promise.resolve(null),
+  ]);
+  const request = cleanMenuRequest(raw, catalog.bodyParts.map((p) => p.name));
+  if (!request) return { ok: false, error: "目的と時間を選んでください" };
+
+  const partName = new Map(catalog.bodyParts.map((p) => [p.id, p.name]));
+  const byId = new Map(catalog.exercises.map((e) => [e.id, e]));
+  const prompt = buildGeneratePrompt({
+    request,
+    exercises: catalog.exercises.map((e) => ({
+      name: e.name,
+      type: e.type,
+      part: e.bodyPartId ? (partName.get(e.bodyPartId) ?? null) : null,
+      excludesBar: e.excludesBar,
+    })),
+    recent: history.recent
+      .slice(0, RECENT_LIMIT)
+      .flatMap((id) => (byId.has(id) ? [{ name: byId.get(id)!.name, sets: history.lastEntries[id] }] : [])),
+    current,
+  });
+
+  const r = await geminiJsonResult<{ name?: string; comment?: string; items?: unknown }>(prompt, GENERATE_SCHEMA, {
+    feature: "fit_menu",
+    timeoutMs: 40000,
+    temperature: 0.6,
+  });
+  if (!r.ok) return { ok: false, error: AI_FAILURE_MESSAGE[r.reason] };
+  // 貼り付けのときと同じ読み取りで、数字の範囲や数を確かめる
+  const parsed = parseMenuText(JSON.stringify({ name: r.data.name, items: r.data.items }));
+  if (!parsed.ok) return { ok: false, error: "AIの答えをメニューにできませんでした。もう一度試してください" };
+  const comment = String(r.data.comment ?? "").trim();
+  return { ok: true, menu: parsed.menu, comment: comment ? [...comment].slice(0, 200).join("") : null };
+}

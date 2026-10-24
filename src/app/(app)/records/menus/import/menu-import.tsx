@@ -1,9 +1,11 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { saveMenuAction } from "@/app/actions/menus";
 import { createCustomExerciseAction } from "@/app/actions/custom-exercises";
+import { generateMenuAction } from "@/app/actions/menu-ai";
+import { MENU_GOALS, MENU_MINUTES, MENU_NOTE_MAX } from "@/lib/menus/generate";
 import { showToast } from "@/components/toaster";
 import type { Entry, ExerciseType } from "@/lib/records/format";
 import type { Catalog } from "@/lib/records/queries";
@@ -35,10 +37,13 @@ export function MenuImport({
   catalog,
   menu,
   recent,
+  aiReady,
 }: {
   catalog: Catalog;
   menu: Menu | null;
   recent: { name: string; sets: Partial<Entry>[] }[];
+  /** アプリのAIが使える（キーが設定されている） */
+  aiReady: boolean;
 }) {
   const router = useRouter();
   const [answer, setAnswer] = useState("");
@@ -49,6 +54,14 @@ export function MenuImport({
   const [overwrite, setOverwrite] = useState(Boolean(menu));
   const [showPrompt, setShowPrompt] = useState(false);
   const [pending, startTransition] = useTransition();
+  const [goal, setGoal] = useState<string>(MENU_GOALS[0]);
+  const [minutes, setMinutes] = useState<number>(60);
+  const [parts, setParts] = useState<string[]>([]);
+  const [note, setNote] = useState("");
+  const [aiComment, setAiComment] = useState<string | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [generating, startGenerate] = useTransition();
+  const confirmRef = useRef<HTMLElement>(null);
 
   const prompt = useMemo(
     () =>
@@ -69,22 +82,40 @@ export function MenuImport({
     }
   };
 
+  const applyMenu = (m: TextMenu) => {
+    setParsed(m);
+    setName(m.name);
+    setChoices(
+      m.items.map((it): Choice => {
+        const hit = matchExercise(it.exercise, catalog.exercises);
+        return hit ? { kind: "existing", exerciseId: hit.id } : { kind: "new", type: guessType(it.sets) };
+      }),
+    );
+    requestAnimationFrame(() => confirmRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  };
+
   const load = () => {
     setError(null);
+    setAiComment(null);
     const r = parseMenuText(answer);
     if (!r.ok) {
       setParsed(null);
       return setError(r.error);
     }
-    setParsed(r.menu);
-    setName(r.menu.name);
-    setChoices(
-      r.menu.items.map((it): Choice => {
-        const hit = matchExercise(it.exercise, catalog.exercises);
-        return hit ? { kind: "existing", exerciseId: hit.id } : { kind: "new", type: guessType(it.sets) };
-      }),
-    );
+    applyMenu(r.menu);
   };
+
+  const generate = () =>
+    startGenerate(async () => {
+      setAiError(null);
+      const r = await generateMenuAction({ goal, minutes, parts, note }, menu?.id ?? null).catch(() => null);
+      if (!r) return setAiError("AIにつながりませんでした。時間をおいて試してください");
+      if (!r.ok) return setAiError(r.error);
+      setAiComment(r.comment);
+      applyMenu(r.menu);
+    });
+
+  const chip = (on: boolean) => `rounded-full px-3 py-1.5 text-sm ${on ? "bg-accent font-medium text-accent-fg" : "border border-border"}`;
 
   const save = () =>
     startTransition(async () => {
@@ -110,6 +141,83 @@ export function MenuImport({
 
   return (
     <div className="space-y-4 pb-8">
+      {aiReady && (
+        <section className="mx-4 rounded-xl border border-accent bg-surface p-4">
+          <h2 className="font-semibold">{menu ? "アプリのAIに見直してもらう" : "アプリのAIに作ってもらう"}</h2>
+          <p className="mt-1 text-sm text-muted">
+            希望を選ぶと、ジムにある種目と最近の記録から{menu ? "今のメニューを見直します" : "メニューを作ります"}。登録の前に中身を確かめられます。
+          </p>
+          <fieldset className="mt-3">
+            <legend className="text-sm font-medium">目的</legend>
+            <div className="mt-1.5 flex flex-wrap gap-2">
+              {MENU_GOALS.map((g) => (
+                <button key={g} type="button" aria-pressed={goal === g} onClick={() => setGoal(g)} className={chip(goal === g)}>
+                  {g}
+                </button>
+              ))}
+            </div>
+          </fieldset>
+          <fieldset className="mt-3">
+            <legend className="text-sm font-medium">時間</legend>
+            <div className="mt-1.5 flex flex-wrap gap-2">
+              {MENU_MINUTES.map((m) => (
+                <button key={m} type="button" aria-pressed={minutes === m} onClick={() => setMinutes(m)} className={chip(minutes === m)}>
+                  {m}分
+                </button>
+              ))}
+            </div>
+          </fieldset>
+          <fieldset className="mt-3">
+            <legend className="text-sm font-medium">
+              鍛えたい部位 <span className="text-xs font-normal text-muted">（任意・いくつでも）</span>
+            </legend>
+            <div className="mt-1.5 flex flex-wrap gap-2">
+              {catalog.bodyParts.map((p) => {
+                const on = parts.includes(p.name);
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    aria-pressed={on}
+                    onClick={() => setParts((list) => (on ? list.filter((x) => x !== p.name) : [...list, p.name]))}
+                    className={chip(on)}
+                  >
+                    {p.name}
+                  </button>
+                );
+              })}
+            </div>
+          </fieldset>
+          <label className="mt-3 block space-y-1">
+            <span className="text-sm font-medium">
+              そのほかの希望 <span className="text-xs font-normal text-muted">（任意）</span>
+            </span>
+            <textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              maxLength={MENU_NOTE_MAX}
+              rows={2}
+              placeholder="例: マシンだけで / 最後に走りたい"
+              className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-base"
+            />
+          </label>
+          {aiError && <p className="mt-2 text-sm text-danger">{aiError}</p>}
+          <button
+            type="button"
+            disabled={generating}
+            onClick={generate}
+            className="mt-3 w-full rounded-lg bg-accent py-3 text-sm font-semibold text-accent-fg disabled:opacity-50"
+          >
+            {generating ? "AIが考えています…（10秒ほど）" : menu ? "見直してもらう" : "メニューを作ってもらう"}
+          </button>
+          <p className="mt-2 text-xs text-muted">名前は送りません。送るのは希望・種目・最近の記録の数字だけです。</p>
+        </section>
+      )}
+
+      {aiReady ? (
+        <details className="mx-4 rounded-xl border border-border bg-surface">
+          <summary className="cursor-pointer p-4 text-sm font-medium">ふだん使っているAI（ChatGPT など）で相談する</summary>
+          <div className="space-y-4 pb-4 [&>section]:mx-0 [&>section]:border-0 [&>section]:py-0">
       <section className="mx-4 rounded-xl border border-border bg-surface p-4">
         <h2 className="font-semibold">1. AIへの依頼文をコピー</h2>
         <p className="mt-1 text-sm text-muted">
@@ -154,10 +262,61 @@ export function MenuImport({
           読み込む
         </button>
       </section>
+          </div>
+        </details>
+      ) : (
+        <>
+      <section className="mx-4 rounded-xl border border-border bg-surface p-4">
+        <h2 className="font-semibold">1. AIへの依頼文をコピー</h2>
+        <p className="mt-1 text-sm text-muted">
+          ふだん使っているAI（ChatGPT・Gemini など）でメニューを相談したあと、その会話に貼り付けてください。相談した内容を、このアプリで読み込める形で出してもらえます。
+          {menu ? "今のメニューと前回の記録も入っています。" : ""}
+        </p>
+        <button type="button" onClick={() => void copyPrompt()} className="mt-3 w-full rounded-lg bg-accent py-2.5 text-sm font-semibold text-accent-fg">
+          依頼文をコピー
+        </button>
+        <button type="button" onClick={() => setShowPrompt((v) => !v)} className="mt-2 text-xs text-muted">
+          {showPrompt ? "依頼文を閉じる" : "依頼文の中身を見る"}
+        </button>
+        {showPrompt && (
+          <textarea
+            readOnly
+            value={prompt}
+            rows={10}
+            aria-label="依頼文"
+            onFocus={(e) => e.target.select()}
+            className="mt-2 w-full rounded-lg border border-border bg-bg px-3 py-2 text-xs"
+          />
+        )}
+      </section>
+
+      <section className="mx-4 rounded-xl border border-border bg-surface p-4">
+        <h2 className="font-semibold">2. AIの答えを貼り付け</h2>
+        <p className="mt-1 text-sm text-muted">AIの答えを全部そのまま貼り付けて大丈夫です（説明文があっても読み取れます）。</p>
+        <textarea
+          value={answer}
+          onChange={(e) => setAnswer(e.target.value)}
+          rows={6}
+          aria-label="AIの答え"
+          className="mt-2 w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm"
+        />
+        {error && <p className="mt-1 text-sm text-danger">{error}</p>}
+        <button
+          type="button"
+          disabled={!answer.trim()}
+          onClick={load}
+          className="mt-2 w-full rounded-lg border border-accent py-2.5 text-sm font-semibold text-accent disabled:opacity-50"
+        >
+          読み込む
+        </button>
+      </section>
+        </>
+      )}
 
       {parsed && (
-        <section className="mx-4 rounded-xl border border-accent bg-surface p-4">
-          <h2 className="font-semibold">3. 確認して登録</h2>
+        <section ref={confirmRef} className="mx-4 scroll-mt-4 rounded-xl border border-accent bg-surface p-4">
+          <h2 className="font-semibold">{aiReady ? "確認して登録" : "3. 確認して登録"}</h2>
+          {aiComment && <p className="mt-1 text-sm text-muted">{aiComment}</p>}
           <label className="mt-2 block space-y-1">
             <span className="text-sm font-medium">メニュー名</span>
             <input

@@ -1066,4 +1066,22 @@ await test("レシピの取り込みの受付: 本人だけ読める・書き込
   await rejects(() => asE("update recipe_import_jobs set status = 'failed' where id = $1", [id]), /permission denied/);
 });
 
+await test("月のふりかえり: 本人だけ読める・書き込みはサーバーだけ・1人1か月に1つ", async () => {
+  await asService("insert into monthly_reviews (user_id, month, facts, comment) values ($1, '2026-09', '{\"visits\":8}', 'よくがんばりました')", [ids.A]);
+  const [r] = await as("A", "select facts, comment from monthly_reviews where month = '2026-09'");
+  assert.deepEqual([r.facts.visits, r.comment], [8, "よくがんばりました"]);
+  assert.equal((await as("B", "select 1 from monthly_reviews")).length, 0, "ほかのメンバーには見えない");
+  await rejects(() => as("A", "insert into monthly_reviews (user_id, month, facts) values ($1, '2026-08', '{}')", [ids.A]), /permission denied/);
+  await rejects(() => as("A", "update monthly_reviews set comment = 'x'"), /permission denied/);
+  await rejects(() => asService("insert into monthly_reviews (user_id, month, facts) values ($1, '2026-09', '{}')", [ids.A]), /duplicate key/);
+  await rejects(() => asService("insert into monthly_reviews (user_id, month, facts) values ($1, '2026-13', '{}')", [ids.A]), /check constraint/);
+});
+
+await test("AIの利用記録: サーバーだけが読み書きできる（管理者も直接は読めない）", async () => {
+  await asService("insert into ai_usage_logs (feature, model, ok, total_tokens) values ('fit_review', 'm', true, 120)");
+  assert.equal((await asService("select total_tokens from ai_usage_logs"))[0].total_tokens, 120);
+  await rejects(() => as("A", "select 1 from ai_usage_logs"), /permission denied/);
+  await rejects(() => as("A", "insert into ai_usage_logs (feature, model, ok) values ('x', 'm', true)"), /permission denied/);
+});
+
 console.log(`\n${passed} passed${process.exitCode ? ", some FAILED" : ""}`);

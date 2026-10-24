@@ -39,7 +39,7 @@ type AiRecipe = {
 export type AiRecipeResult = { ok: true; recipe: ImportedRecipe } | { ok: false; message: string };
 
 async function extract(prompt: string, images: AiImage[], siteName: string | null, notFound: string): Promise<AiRecipeResult> {
-  const r = await geminiJsonResult<AiRecipe>(prompt, RECIPE_SCHEMA, images);
+  const r = await geminiJsonResult<AiRecipe>(prompt, RECIPE_SCHEMA, { feature: images.length ? "cook_recipe_image" : "cook_recipe_text", images });
   if (!r.ok) return { ok: false, message: AI_FAILURE_MESSAGE[r.reason] + (r.status ? `（エラー ${r.status}）` : "") };
   const recipe = toImported(r.data, siteName);
   return recipe ? { ok: true, recipe } : { ok: false, message: notFound };
@@ -117,7 +117,7 @@ export async function aiMatchIngredients(names: string[], masterNames: string[])
     "",
     `食材の一覧: ${masterNames.join("、")}`,
   ].join("\n");
-  const r = await geminiJson<{ input: string; match: string }[]>(prompt, MATCH_SCHEMA, [], MATCH_TIMEOUT_MS);
+  const r = await geminiJson<{ input: string; match: string }[]>(prompt, MATCH_SCHEMA, { feature: "cook_match", timeoutMs: MATCH_TIMEOUT_MS });
   for (const m of r ?? []) {
     if (names.includes(m.input) && master.has(m.match)) result.set(m.input, m.match);
   }

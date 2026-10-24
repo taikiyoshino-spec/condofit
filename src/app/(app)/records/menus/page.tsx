@@ -27,7 +27,7 @@ export default async function MenusPage() {
           href="/records/menus/import"
           className="block rounded-xl border border-dashed border-accent p-3 text-center text-sm font-medium text-accent"
         >
-          AIに相談して作る（答えを貼り付けて登録）
+          AIにメニューを作ってもらう
         </Link>
       </div>
       {menus.length === 0 ? (

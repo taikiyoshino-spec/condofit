@@ -85,7 +85,7 @@ export function progressSeries(sessions: { date: string; entries: Entry[] }[], m
 }
 
 /** a が b より良い記録か。最大重量は「重さが同じなら回数が多い方」が上（同じ重さで回数が増えても成長として扱う） */
-function beats(
+export function beats(
   metric: ProgressMetric,
   a: { value: number; repsAtMax: number | null },
   b: { value: number; repsAtMax: number | null },

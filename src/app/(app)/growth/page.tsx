@@ -7,15 +7,24 @@ import { RecentProgressList } from "../records/recent-progress";
 import { getPartSessions, listPartInfo, recentFourWeeks } from "@/lib/records/parts-queries";
 import { partBalance } from "@/lib/records/parts";
 import { PartBalanceSection } from "./part-balance";
+import { MonthReviewCard } from "./month-review";
+import { getMonthReview, hasSessionsIn, reviewMonth } from "@/lib/records/review-queries";
+import { aiAvailable } from "@/lib/ai/gemini";
+
+// 先月のふりかえりを初めて作るときに AI を待つため
+export const maxDuration = 60;
 
 /** 成長タブ: 自分の活動サマリーと全種目の成長一覧。種目をタップすると成長グラフと過去の記録へ */
 export default async function GrowthPage() {
   const member = await requireMember();
-  const [summary, items, parts, partSessions] = await Promise.all([
+  const lastMonth = reviewMonth();
+  const [summary, items, parts, partSessions, review, hadLastMonth] = await Promise.all([
     getMyActivitySummary(member.id),
     getMyRecentProgress(member.id, Number.POSITIVE_INFINITY),
     listPartInfo(),
     getPartSessions({ userId: member.id, ...recentFourWeeks() }),
+    getMonthReview(member.id, lastMonth),
+    hasSessionsIn(member.id, lastMonth),
   ]);
   const balance = partBalance(partSessions, parts, new Set(parts.filter((p) => p.cardio).map((p) => p.id)));
   const notMuscle = new Set(parts.filter((p) => p.freeWeight).map((p) => p.id));
@@ -27,6 +36,7 @@ export default async function GrowthPage() {
   return (
     <>
       <PageHeader title="成長" />
+      {(review || hadLastMonth) && <MonthReviewCard month={lastMonth} initial={review} aiReady={aiAvailable()} />}
       <Section>
         <table className="w-full text-sm">
           <thead>

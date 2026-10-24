@@ -12,7 +12,12 @@ export default async function AdminPage() {
   return (
     <>
       <PageHeader title="管理者メニュー" back="/mypage/settings" />
-      <MenuList items={[{ href: "/admin/exercises", label: "種目マスタ管理" }]} />
+      <MenuList
+        items={[
+          { href: "/admin/exercises", label: "種目マスタ管理" },
+          { href: "/admin/ai", label: "AIの利用状況" },
+        ]}
+      />
       <Section title="招待URL">
         <p className="mb-3 text-sm text-muted">
           {invite
