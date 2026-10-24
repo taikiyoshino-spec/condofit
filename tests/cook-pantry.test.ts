@@ -14,6 +14,12 @@ test("期限の表示", () => {
   assert.equal(expiryLabel("2026-10-20", today), "あと1日");
   assert.equal(expiryLabel("2026-11-03", today), "11/3まで");
   assert.equal(expiryLabel("2026-11-01", "2026-10-31"), "あと1日", "月をまたぐ");
+  assert.equal(expiryLabel("2027-02-01", today), "2/1まで", "年をまたいでも11か月未満は月日");
+  assert.equal(expiryLabel("2027-09-18", today), "9/18まで", "11か月に1日足りない");
+  assert.equal(expiryLabel("2027-09-19", today), "11か月以上先");
+  assert.equal(expiryLabel("2027-10-18", today), "11か月以上先", "1年に1日足りない");
+  assert.equal(expiryLabel("2027-10-19", today), "1年以上先");
+  assert.equal(expiryLabel("2036-10-17", today), "9年以上先", "塩など（3650日）");
 });
 
 const ing = (name: string, ingredientId: string | null = name, optional = false) => ({ ingredientId, name, optional });

@@ -21,13 +21,26 @@ export function expiryStatus(expiresOn: string | null, today: string): ExpirySta
   return left <= SOON_DAYS ? "soon" : "ok";
 }
 
-/** 期限の表示（「期限切れ」「今日まで」「あと2日」「10/25まで」） */
+/** today から date まで何か月か（日にちが足りなければ1か月少なく数える） */
+export function monthsUntil(date: string, today: string): number {
+  const [y1, m1, d1] = today.split("-").map(Number);
+  const [y2, m2, d2] = date.split("-").map(Number);
+  return (y2 - y1) * 12 + (m2 - m1) - (d2 < d1 ? 1 : 0);
+}
+
+/**
+ * 期限の表示（「期限切れ」「今日まで」「あと2日」「10/25まで」）。
+ * 年をまたぐと月日だけでは分からないので、11か月以上先は「11か月以上先」「1年以上先」のようにする
+ */
 export function expiryLabel(expiresOn: string | null, today: string): string | null {
   const left = daysLeft(expiresOn, today);
   if (left === null || !expiresOn) return null;
   if (left < 0) return "期限切れ";
   if (left === 0) return "今日まで";
   if (left <= SOON_DAYS) return `あと${left}日`;
+  const months = monthsUntil(expiresOn, today);
+  if (months >= 12) return `${Math.floor(months / 12)}年以上先`;
+  if (months >= 11) return "11か月以上先";
   return `${Number(expiresOn.slice(5, 7))}/${Number(expiresOn.slice(8, 10))}まで`;
 }
 
