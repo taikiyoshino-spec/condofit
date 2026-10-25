@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* タブレットなど横長の広い画面（レシピを材料と作り方の2段組みにする） */
+@custom-variant tablet (@media (orientation: landscape) and (min-width: 768px));
+
 :root {
   --bg: #f6f7f5;
   --surface: #ffffff;

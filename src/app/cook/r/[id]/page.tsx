@@ -35,14 +35,15 @@ export default async function RecipePage({ params, searchParams }: PageProps<"/c
   const isOwner = recipe.ownerId === member.id;
 
   return (
-    <article className="pb-24">
+    // 横長の広い画面では、材料（左1/3）と作り方（右2/3）を並べて1画面に収める
+    <article data-wide className="pb-24">
       <PageHeader title="レシピ" back="/cook/recipes" />
       {recipe.photoPath && (
         // eslint-disable-next-line @next/next/no-img-element -- 認証付きの配信なので next/image の最適化は使わない
         <img
           src={recipePhotoUrl(recipe.id, recipe.photoPath, "full")}
           alt=""
-          className="mb-3 aspect-[4/3] w-full bg-border object-cover"
+          className="mb-3 aspect-[4/3] w-full bg-border object-cover tablet:mx-4 tablet:aspect-auto tablet:h-56 tablet:w-[calc(100%-2rem)] tablet:rounded-xl"
         />
       )}
       <header className="mx-4 mb-4">
@@ -95,21 +96,25 @@ export default async function RecipePage({ params, searchParams }: PageProps<"/c
         pantryUsed={pantryUsed}
       />
 
-      <IngredientList recipeId={recipe.id} ingredients={recipe.ingredients} servings={recipe.servings} initialServings={recipe.servings ? householdServings : null} hints={hints} />
+      <div className="tablet:grid tablet:grid-cols-3 tablet:items-start">
+        <div className="tablet:sticky tablet:top-2 tablet:max-h-[calc(100dvh-6rem)] tablet:overflow-y-auto">
+          <IngredientList recipeId={recipe.id} ingredients={recipe.ingredients} servings={recipe.servings} initialServings={recipe.servings ? householdServings : null} hints={hints} />
+        </div>
 
-      <section className="mx-4 mb-4">
-        <h2 className="mb-2 text-lg font-semibold">作り方</h2>
-        <ol className="space-y-3">
-          {recipe.steps.map((s, i) => (
-            <li key={i} className="flex gap-3">
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent text-sm font-bold text-accent-fg">
-                {i + 1}
-              </span>
-              <p className="flex-1 whitespace-pre-wrap pt-0.5 leading-relaxed">{s}</p>
-            </li>
-          ))}
-        </ol>
-      </section>
+        <section className="mx-4 mb-4 tablet:col-span-2">
+          <h2 className="mb-2 text-lg font-semibold">作り方</h2>
+          <ol className="space-y-3">
+            {recipe.steps.map((s, i) => (
+              <li key={i} className="flex gap-3">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent text-sm font-bold text-accent-fg">
+                  {i + 1}
+                </span>
+                <p className="flex-1 whitespace-pre-wrap pt-0.5 leading-relaxed tablet:text-lg">{s}</p>
+              </li>
+            ))}
+          </ol>
+        </section>
+      </div>
 
       {recipe.memo && (
         <section className="mx-4 mb-4 rounded-xl border border-border bg-surface p-4">

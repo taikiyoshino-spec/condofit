@@ -25,7 +25,7 @@ export default async function CookLayout({ children }: LayoutProps<"/cook">) {
   const [profiles] = await Promise.all([listMemberProfiles(), supabase.rpc("ensure_my_household")]);
   return (
     <MembersProvider profiles={profiles}>
-      <div className="theme-cook mx-auto min-h-full max-w-lg pb-24">
+      <div className="theme-cook mx-auto min-h-full max-w-lg pb-24 tablet:has-[[data-wide]]:max-w-6xl">
         {children}
         <Toaster />
         <CookNav />
