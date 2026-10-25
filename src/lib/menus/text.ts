@@ -86,6 +86,7 @@ export function buildMenuPrompt({
     ),
     "```",
     "- 重量系は weight_kg（kg）と reps（回）、有酸素は duration_min（分）と distance_km（km）",
+    "- weight_kg は5kg単位にする（5, 10, 15, 20 …）",
     `- 種目は${MAX_ITEMS}まで、1種目のセットは${MAX_SETS}まで`,
   );
   return lines.join("\n");

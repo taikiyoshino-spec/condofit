@@ -70,11 +70,23 @@ export function fitToTime<T extends { type: ExerciseType; minutes: number | null
 /** 重量系で回数を決めていないときの回数 */
 export const DEFAULT_REPS = 10;
 
-/** 重量系のセットを「重さ×回数」にそろえる。AIが片方を省いたときは前回の記録（同じ順のセット、なければ最後のセット）で補う */
+/** AIに作ってもらうメニューの重さの刻み（kg） */
+export const WEIGHT_STEP = 5;
+
+/** 重さを5kg単位にする（いちばん近い値。0より重ければ最低5kg） */
+export function roundWeight(kg: number): number {
+  return Math.max(WEIGHT_STEP, Math.round(kg / WEIGHT_STEP) * WEIGHT_STEP);
+}
+
+/**
+ * 重量系のセットを「重さ×回数」にそろえる。AIが片方を省いたときは前回の記録（同じ順のセット、なければ最後のセット）で補う。
+ * 重さは5kg単位にする
+ */
 export function completeWeightSets(sets: Partial<Entry>[], last: Partial<Entry>[] | undefined): Partial<Entry>[] {
   return sets.map((s, i) => {
     const prev = last?.length ? last[Math.min(i, last.length - 1)] : undefined;
-    const weight_kg = s.weight_kg ?? prev?.weight_kg ?? undefined;
+    const raw = s.weight_kg ?? prev?.weight_kg ?? null;
+    const weight_kg = raw != null && raw > 0 ? roundWeight(raw) : null;
     return { ...s, ...(weight_kg != null ? { weight_kg } : {}), reps: s.reps ?? prev?.reps ?? DEFAULT_REPS };
   });
 }
@@ -115,6 +127,7 @@ export function buildGeneratePrompt({
     ...timeRules(request.minutes),
     "- 最近の記録がある種目は、その重さ・回数を目安にする（同じか少し上）",
     "- 重量系は、どのセットにも weight_kg と reps を両方入れる（「重さ×回数」で示す）。最近の記録がない種目は、無理のない軽めの重さを目安として入れる",
+    "- weight_kg は5kg単位にする（5, 10, 15, 20 …。前回の記録が端数でも、いちばん近い5kg単位に）",
     "- name はメニューの短い名前（20文字くらいまで）",
     "- comment は、このメニューのねらいとコツを2文で（120文字以内）。けが・病気の助言はしない",
   );
@@ -189,6 +202,7 @@ export function buildTodayPrompt({
     ...timeRules(request.minutes),
     "- 最近の記録がある種目は、その重さ・回数と今日の調子から決める",
     "- 重量系は、どのセットにも weight_kg と reps を両方入れる（「重さ×回数」で示す）。最近の記録がない種目は、無理のない軽めの重さを目安として入れる",
+    "- weight_kg は5kg単位にする（5, 10, 15, 20 …。前回の記録が端数でも、いちばん近い5kg単位に）",
     "- menus に案を並べる。name はその案の短い名前（「背中と脚の日」「軽めの全身」など、20文字くらいまで。案ごとに違う名前）",
     "- reason は、その組み合わせを選んだ理由を端的に1文で（40文字以内。例「脚が10日空いているので脚を中心に」「疲れぎみなので軽めの全身」）",
     "- けが・病気の助言はしない",

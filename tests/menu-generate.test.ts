@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildGeneratePrompt, buildTodayPrompt, cleanMenuRequest, cleanTodayRequest, completeWeightSets, fitToTime } from "../src/lib/menus/generate.ts";
+import { buildGeneratePrompt, buildTodayPrompt, cleanMenuRequest, cleanTodayRequest, completeWeightSets, fitToTime, roundWeight } from "../src/lib/menus/generate.ts";
 
 test("メニュー作成の依頼: 目的・時間は決まった中から、部位はマスタの部位だけ、希望は200文字まで", () => {
   const parts = ["胸", "脚"];
@@ -81,4 +81,13 @@ test("重量系のセットは「重さ×回数」にそろえる: 省かれた�
     { weight_kg: 40, reps: 8 },
   ]);
   assert.deepEqual(completeWeightSets([{ weight_kg: 30 }, { reps: 15 }], undefined), [{ weight_kg: 30, reps: 10 }, { reps: 15 }], "前回がなければ重さは空のまま");
+});
+
+test("AIのメニューの重さは5kg単位（いちばん近い値、最低5kg）。前回の記録で補った重さも", () => {
+  assert.deepEqual([roundWeight(42.5), roundWeight(41), roundWeight(43), roundWeight(1), roundWeight(60)], [45, 40, 45, 5, 60]);
+  const last = [{ weight_kg: 32.5, reps: 10, duration_min: null, distance_km: null }];
+  assert.deepEqual(completeWeightSets([{ weight_kg: 22, reps: 12 }, { reps: 8 }], last), [
+    { weight_kg: 20, reps: 12 },
+    { weight_kg: 35, reps: 8 },
+  ]);
 });
