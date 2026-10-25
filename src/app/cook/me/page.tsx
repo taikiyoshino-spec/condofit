@@ -13,6 +13,7 @@ import { PushToggle, SettingToggles } from "@/app/(app)/mypage/settings/notifica
 const NOTIFY_ITEMS = [
   { key: "cook_cooked", label: "作った", hint: "自分のレシピを誰かが作ったとき" },
   { key: "cook_reaction", label: "コメント・お気に入り", hint: "自分のレシピへのコメント・お気に入り、コメントへの返事" },
+  { key: "cook_new_recipe", label: "新しいレシピ", hint: "仲間が新しいレシピをグループに公開したとき（最初はオフ）" },
   { key: "cook_shopping", label: "買い物リスト", hint: "家族が買い物リストに追加したとき（続けて追加したときは5分後にまとめて1回）" },
 ] as const;
 
