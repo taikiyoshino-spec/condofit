@@ -77,7 +77,7 @@ export type TodayProposal = { menu: MenuForEditor; reason: string | null; minute
 export type TodayMenuResult = { ok: true; proposals: TodayProposal[] } | { ok: false; error: string };
 
 /**
- * 記録を始めるときに、今日の調子と希望・最近の記録から、AIに今日のメニューの案をいくつか作ってもらう（保存はしない）。
+ * 記録を始めるときに、今日の強さと希望・最近の記録から、AIに今日のメニューの案をいくつか作ってもらう（保存はしない）。
  * 一覧にない種目は外す（その場で記録を始めるため）
  */
 export async function generateTodayMenuAction(raw: unknown): Promise<TodayMenuResult> {
@@ -90,7 +90,7 @@ export async function generateTodayMenuAction(raw: unknown): Promise<TodayMenuRe
     getPartSessions({ userId: member.id, ...recentFourWeeks(today) }),
   ]);
   const request = cleanTodayRequest(raw, catalog.bodyParts.map((p) => p.name));
-  if (!request) return { ok: false, error: "調子と時間を選んでください" };
+  if (!request) return { ok: false, error: "強さと時間を選んでください" };
 
   const partName = new Map(catalog.bodyParts.map((p) => [p.id, p.name]));
   const byId = new Map(catalog.exercises.map((e) => [e.id, e]));

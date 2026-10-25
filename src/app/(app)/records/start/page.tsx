@@ -16,7 +16,7 @@ export default async function StartRecordPage() {
         <Link href="/records/ai" className="mx-4 mb-4 flex items-center gap-3 rounded-xl border border-accent bg-surface p-4">
           <span className="min-w-0 flex-1">
             <span className="block font-semibold">AIと相談して始める</span>
-            <span className="block text-xs text-muted">今日の調子とやりたい部位を選ぶと、最近の記録から今日のメニューを作ります</span>
+            <span className="block text-xs text-muted">今日の強さとやりたい部位を選ぶと、最近の記録から今日のメニューを作ります</span>
           </span>
           <span className="text-accent" aria-hidden>
             ›

@@ -137,12 +137,12 @@ export function buildGeneratePrompt({
 /** 今日のメニューの案の数（1回の問い合わせでまとめて作ってもらう） */
 export const TODAY_PROPOSALS = 3;
 
-/** 今日の調子（記録を始めるときにAIと相談する） */
-export const CONDITIONS = ["絶好調", "ふつう", "疲れぎみ"] as const;
+/** 今日の強さ（記録を始めるときにAIと相談する）。前回の記録と比べた重さ・回数の決め方で、部位の選び方には使わない */
+export const CONDITIONS = ["いつもより軽め", "いつもどおり", "前回をこえる"] as const;
 const CONDITION_RULE: Record<(typeof CONDITIONS)[number], string> = {
-  絶好調: "調子がいいので、前回より少し重く、または回数・セットを少し多くしてよい",
-  ふつう: "前回と同じくらいの重さ・回数にする",
-  疲れぎみ: "疲れぎみなので、前回より軽め・少なめにして、種目も少なくする",
+  いつもより軽め: "前回より重さか回数を少し下げ、セット数も少なめにする",
+  いつもどおり: "前回と同じ重さ・回数にする",
+  前回をこえる: "記録がある種目は前回をこえる（重さを5kg上げる、または同じ重さで回数を1〜2回増やす）",
 };
 
 export type TodayRequest = { condition: (typeof CONDITIONS)[number]; minutes: number; parts: string[]; note: string };
@@ -160,7 +160,7 @@ export function cleanTodayRequest(raw: unknown, partNames: string[]): TodayReque
   return { condition, minutes, parts, note };
 }
 
-/** 今日のメニューの依頼文。名前は渡さず、調子・希望・最近の記録の数字だけを渡す */
+/** 今日のメニューの依頼文。名前は渡さず、強さ・希望・最近の記録の数字だけを渡す */
 export function buildTodayPrompt({
   request,
   exercises,
@@ -177,7 +177,7 @@ export function buildTodayPrompt({
     "案どうしは、部位の組み合わせ・種目・強さのどれかをはっきり変えて、選びがいのあるものにしてください（どれも下の希望には合わせる）。",
     "",
     "【今日】",
-    `- 調子: ${request.condition}（${CONDITION_RULE[request.condition]}）`,
+    `- 強さ: ${request.condition}（${CONDITION_RULE[request.condition]}。強さは重さ・回数の決め方で、部位や種目の選び方は強さに関係なく決める）`,
     `- 時間: ${request.minutes}分くらい（準備・休憩を含む）`,
     request.parts.length
       ? `- やりたい部位: ${request.parts.join("・")}`
@@ -200,11 +200,11 @@ export function buildTodayPrompt({
     "- 使える種目の中から選ぶ。一覧にない種目は入れない",
     "- 重量系は weight_kg（kg）と reps（回）、有酸素は duration_min（分）と distance_km（km、なければ省く）。セットの数だけ sets に並べる",
     ...timeRules(request.minutes),
-    "- 最近の記録がある種目は、その重さ・回数と今日の調子から決める",
+    "- 最近の記録がある種目は、その重さ・回数と今日の強さから決める。記録がない種目（最近やっていない部位など）も、強さを理由に外さない",
     "- 重量系は、どのセットにも weight_kg と reps を両方入れる（「重さ×回数」で示す）。最近の記録がない種目は、無理のない軽めの重さを目安として入れる",
     "- weight_kg は5kg単位にする（5, 10, 15, 20 …。前回の記録が端数でも、いちばん近い5kg単位に）",
     "- menus に案を並べる。name はその案の短い名前（「背中と脚の日」「軽めの全身」など、20文字くらいまで。案ごとに違う名前）",
-    "- reason は、その組み合わせを選んだ理由を端的に1文で（40文字以内。例「脚が10日空いているので脚を中心に」「疲れぎみなので軽めの全身」）",
+    "- reason は、その組み合わせを選んだ理由を端的に1文で（40文字以内。例「脚が10日空いているので脚を中心に」「前回をこえるため胸を重めに」）",
     "- けが・病気の助言はしない",
   );
   return lines.join("\n");

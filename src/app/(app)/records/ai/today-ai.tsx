@@ -21,7 +21,7 @@ function setText(s: Partial<Entry>) {
   return parts.join("×") || "—";
 }
 
-/** 今日の調子・やりたい部位・時間を選ぶ → AIの案（いくつか）から選ぶ → そのまま記録（記録画面は同じ画面のまま切り替える） */
+/** 今日の強さ・やりたい部位・時間を選ぶ → AIの案（いくつか）から選ぶ → そのまま記録（記録画面は同じ画面のまま切り替える） */
 export function TodayAi({
   catalog,
   history,
@@ -33,7 +33,7 @@ export function TodayAi({
   performedAt: string;
   checkedIn: boolean;
 }) {
-  const [condition, setCondition] = useState<TodayRequest["condition"]>("ふつう");
+  const [condition, setCondition] = useState<TodayRequest["condition"]>("いつもどおり");
   const [minutes, setMinutes] = useState(60);
   const [parts, setParts] = useState<string[]>([]);
   const [note, setNote] = useState("");
@@ -171,7 +171,7 @@ export function TodayAi({
       <section className="mx-4 mb-4 rounded-xl border border-border bg-surface p-4">
         <p className="text-sm text-muted">今日のことを教えてください。最近の記録をもとに、AIが今日のメニューを作ります。</p>
         <fieldset className="mt-4">
-          <legend className="text-sm font-medium">今日の調子は？</legend>
+          <legend className="text-sm font-medium">今日の強さは？</legend>
           <div className="mt-1.5 flex flex-wrap gap-2">
             {CONDITIONS.map((c) => (
               <button key={c} type="button" aria-pressed={condition === c} onClick={() => setCondition(c)} className={chip(condition === c)}>
@@ -237,7 +237,7 @@ export function TodayAi({
         >
           {pending ? "AIが考えています…（10秒ほど）" : "今日のメニューの案を作ってもらう"}
         </button>
-        <p className="mt-2 text-xs text-muted">名前は送りません。送るのは調子・希望・最近の記録の数字だけです。</p>
+        <p className="mt-2 text-xs text-muted">名前は送りません。送るのは強さ・希望・最近の記録の数字だけです。</p>
       </section>
     </>
   );

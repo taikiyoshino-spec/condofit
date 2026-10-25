@@ -33,9 +33,9 @@ test("メニュー作成の依頼文: 希望・最近の記録・使える種目
   assert.match(p, /- ランニングマシン（有酸素）/, "部位名と種類が同じなら重ねない");
 });
 
-test("今日のメニューの依頼: 調子・部位・時間。部位がなければおまかせで、最近やっていない部位を中心に", () => {
+test("今日のメニューの依頼: 強さ・部位・時間。部位がなければおまかせで、最近やっていない部位を中心に", () => {
   assert.equal(cleanTodayRequest({ condition: "元気", minutes: 60 }, ["胸"]), null);
-  const req = cleanTodayRequest({ condition: "疲れぎみ", minutes: 30, parts: [] }, ["胸"])!;
+  const req = cleanTodayRequest({ condition: "前回をこえる", minutes: 30, parts: [] }, ["胸"])!;
   const p = buildTodayPrompt({
     request: req,
     exercises: [{ name: "チェストプレス", type: "weight", part: "胸", excludesBar: false }],
@@ -46,7 +46,8 @@ test("今日のメニューの依頼: 調子・部位・時間。部位がなけ
     ],
   });
   assert.match(p, /今日のメニューの案を3つ/, "1回の問い合わせで案をいくつか");
-  assert.match(p, /調子: 疲れぎみ（.*軽め/);
+  assert.match(p, /強さ: 前回をこえる（.*5kg上げる/);
+  assert.match(p, /部位や種目の選び方は強さに関係なく/, "強さで、最近やっていない部位が外れないように");
   assert.match(p, /やりたい部位: おまかせ/);
   assert.match(p, /- 胸: 12セット・最後は2日前/);
   assert.match(p, /- 脚: 0セット・4週間やっていない/);
