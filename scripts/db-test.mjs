@@ -859,15 +859,14 @@ await test("レシピの反応: コメント（作成者と先にコメントし
   assert.equal((await as("D", "select id from recipe_comments where recipe_id = $1", [id])).length, 0, "グループ外は見えない");
 });
 
-await test("レシピの通知: 新しいグループ公開は仲間全員へ（初めて公開したときだけ・設定でオフ）", async () => {
-  await asSuper("update notification_settings set cook_new_recipe = false where user_id = $1", [ids.B]);
+await test("レシピの通知: 新しいレシピを追加・グループ公開しても通知しない", async () => {
   const [{ id }] = await as("C", "select save_recipe(null, $1::jsonb) id", [recipeJson({ title: "最初は自分だけ", visibility: "private" })]);
   const count = async (user) => (await notes(user, "cook_new_recipe")).filter((p) => p.recipe_id === id).length;
   assert.equal(await count(ids.A), 0, "自分だけのレシピは通知しない");
   await as("C", "select save_recipe($1, $2::jsonb)", [id, recipeJson({ title: "公開", visibility: "group" })]);
   await as("C", "select save_recipe($1, $2::jsonb)", [id, recipeJson({ title: "公開", visibility: "household" })]);
   await as("C", "select save_recipe($1, $2::jsonb)", [id, recipeJson({ title: "公開", visibility: "group" })]);
-  assert.deepEqual([await count(ids.A), await count(idE), await count(ids.B), await count(ids.C), await count(ids.D)], [1, 1, 0, 0, 0]);
+  assert.deepEqual([await count(ids.A), await count(idE), await count(ids.B), await count(ids.C), await count(ids.D)], [0, 0, 0, 0, 0]);
 });
 
 await test("CondoCook のランキング: グループ公開だけ・作成者本人の作ったは「作られたレシピ」に数えない", async () => {
