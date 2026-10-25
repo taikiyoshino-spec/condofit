@@ -16,6 +16,9 @@ function dbError(message: string): string {
   if (message.includes("past_date")) return "今日以降の日付を選んでください";
   if (message.includes("past_schedule")) return "過去の予定は変更できません";
   if (message.includes("schedule_deleted")) return "この予定は削除されています";
+  if (message.includes("not_today")) return "出発を知らせられるのは今日の予定だけです";
+  if (message.includes("not_participant")) return "この予定に参加している人だけが知らせられます";
+  if (message.includes("already_departed")) return "もう出発を知らせています";
   return "保存できませんでした。もう一度お試しください";
 }
 
@@ -118,4 +121,16 @@ export async function setIntentionAction(scheduleId: string, intention: Intentio
   revalidate();
   schedulePush(member, scheduleId, since);
   return { ok: true };
+}
+
+/** 「出発します」: 今日の予定のほかの参加者にだけ知らせる（1つの予定で1回）。戻り値の count は知らせた相手の人数 */
+export async function departAction(scheduleId: string): Promise<{ ok: true; count: number } | { ok: false; error: string }> {
+  const member = await requireMember();
+  const since = new Date();
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("depart_for_schedule", { p_schedule_id: scheduleId });
+  if (error) return { ok: false, error: dbError(error.message) };
+  revalidate();
+  schedulePush(member, scheduleId, since);
+  return { ok: true, count: Number(data) || 0 };
 }

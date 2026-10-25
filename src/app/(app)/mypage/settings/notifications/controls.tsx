@@ -13,7 +13,7 @@ type SettingItem = { key: NotificationSettingKey; label: string; hint: string };
 const LABELS: SettingItem[] = [
   { key: "check_in", label: "チェックイン通知", hint: "誰かがFitにチェックインしたとき（プッシュ + アプリ内）" },
   { key: "location_stale", label: "位置確認停止通知", hint: "チェックイン中に15分以上位置を確認できないとき（プッシュ + アプリ内）" },
-  { key: "schedule", label: "予定の通知", hint: "自分の予定への参加・キャンセル、参加中の予定の変更・削除（プッシュ + アプリ内）" },
+  { key: "schedule", label: "予定の通知", hint: "自分の予定への参加・キャンセル、参加中の予定の変更・削除、一緒の予定の人の出発（プッシュ + アプリ内）" },
   { key: "comment", label: "コメント通知", hint: "誰かが実績にコメントしたとき（プッシュ + アプリ内）" },
 ];
 

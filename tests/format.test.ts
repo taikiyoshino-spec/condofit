@@ -71,3 +71,10 @@ test("買い物リストの通知はまとめて1回", () => {
   assert.equal(f.sub, "牛乳、パン、卵 など");
   assert.equal(f.href, "/cook/shopping");
 });
+
+test("出発の通知は「AさんがFitに向けて出発しました」「9/28 夜の予定」", () => {
+  const f = formatNotification(n("schedule_depart", { schedule_id: sid, date: "2026-09-28", time_slot: "night" }));
+  assert.equal(f.text, "AさんがFitに向けて出発しました");
+  assert.equal(f.sub, "9/28 夜の予定");
+  assert.equal(f.href, `/schedule/s/${sid}`);
+});

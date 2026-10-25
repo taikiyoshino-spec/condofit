@@ -15,7 +15,7 @@ export async function pushScheduleNotifications(actorId: string, actorName: stri
     .from("notifications")
     .select("recipient_user_id, type, payload")
     .eq("actor_user_id", actorId)
-    .in("type", ["schedule_join", "schedule_cancel", "schedule_update", "schedule_delete"])
+    .in("type", ["schedule_join", "schedule_cancel", "schedule_update", "schedule_delete", "schedule_depart"])
     .eq("payload->>schedule_id", scheduleId)
     .gte("created_at", from);
   if (!data?.length) return;

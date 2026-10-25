@@ -79,3 +79,9 @@ export function formatMonth(month: string): string {
   const [y, m] = month.split("-").map(Number);
   return `${y}年${m}月`;
 }
+
+/** 日時を JST の「12:05」に */
+export function formatTimeJst(iso: string): string {
+  const d = new Date(new Date(iso).getTime() + 9 * 60 * 60 * 1000);
+  return `${d.getUTCHours()}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
+}

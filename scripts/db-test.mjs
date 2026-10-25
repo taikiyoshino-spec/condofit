@@ -1084,4 +1084,35 @@ await test("AIの利用記録: サーバーだけが読み書きできる（管�
   await rejects(() => as("A", "insert into ai_usage_logs (feature, model, ok) values ('x', 'm', true)"), /permission denied/);
 });
 
+await test("出発します: 今日の予定の参加者だけが1回、ほかの参加者にだけ通知", async () => {
+  await clearNotifs();
+  const [{ id: today }] = await as("A", "insert into schedules (date, time_slot) values (jst_today(), 'night') returning id");
+  await as("B", "insert into schedule_participants (schedule_id, intention) values ($1, 'maybe')", [today]);
+  await clearNotifs();
+  const [{ n }] = await as("A", "select depart_for_schedule($1) as n", [today]);
+  assert.equal(n, 1, "ほかの参加者はBだけ");
+  const [nb] = await notifs("B");
+  assert.equal(nb.type, "schedule_depart");
+  assert.equal(nb.actor_user_id, ids.A);
+  assert.equal(nb.payload.schedule_id, today);
+  assert.equal((await notifs("C")).length, 0, "参加していないCには知らせない");
+  const [row] = await as("C", "select departed_at from schedule_participants where schedule_id = $1 and user_id = $2", [today, ids.A]);
+  assert.ok(row.departed_at, "出発した時刻はメンバー全員に見える");
+  await rejects(() => as("A", "select depart_for_schedule($1)", [today]), /already_departed/);
+  await rejects(() => as("C", "select depart_for_schedule($1)", [today]), /not_participant/);
+  await rejects(() => as("D", "select depart_for_schedule($1)", [today]), /forbidden/);
+  await rejects(() => asAnon("select depart_for_schedule($1)", [today]), /permission denied/);
+  await rejects(
+    () => as("B", "update schedule_participants set departed_at = now() where schedule_id = $1 and user_id = $2", [today, ids.B]),
+    /permission denied/,
+  );
+  await rejects(
+    () => as("C", "insert into schedule_participants (schedule_id, intention, departed_at) values ($1, 'going', now())", [today]),
+    /row-level security/,
+  );
+  const [{ id: later }] = await as("A", "insert into schedules (date, time_slot) values (jst_today() + 1, 'night') returning id");
+  await rejects(() => as("A", "select depart_for_schedule($1)", [later]), /not_today/);
+  await clearNotifs();
+});
+
 console.log(`\n${passed} passed${process.exitCode ? ", some FAILED" : ""}`);

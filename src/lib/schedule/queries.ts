@@ -3,7 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import type { Intention, TimeSlot } from "@/lib/schedule/time-slots";
 import { groupVisits, type DayVisits } from "@/lib/schedule/visits";
 
-export type Participant = { userId: string; displayName: string; intention: Intention };
+/** departedAt: 「出発します」を押した時刻 */
+export type Participant = { userId: string; displayName: string; intention: Intention; departedAt: string | null };
 export type Schedule = {
   id: string;
   date: string;
@@ -16,7 +17,7 @@ export type Schedule = {
 
 const SELECT = `id, date, time_slot, creator_user_id, deleted_at, created_at,
   creator:users!schedules_creator_user_id_fkey(display_name),
-  schedule_participants(user_id, intention, created_at, users(display_name))`;
+  schedule_participants(user_id, intention, created_at, departed_at, users(display_name))`;
 
 const SLOT_ORDER: Record<TimeSlot, number> = { morning: 0, noon: 1, evening: 2, night: 3 };
 
@@ -28,7 +29,13 @@ type Row = {
   deleted_at: string | null;
   created_at: string;
   creator: { display_name: string } | null;
-  schedule_participants: { user_id: string; intention: Intention; created_at: string; users: { display_name: string } | null }[];
+  schedule_participants: {
+    user_id: string;
+    intention: Intention;
+    created_at: string;
+    departed_at: string | null;
+    users: { display_name: string } | null;
+  }[];
 };
 
 function toSchedule(r: Row): Schedule {
@@ -43,7 +50,7 @@ function toSchedule(r: Row): Schedule {
       .sort((a, b) =>
         a.intention === b.intention ? a.created_at.localeCompare(b.created_at) : a.intention === "going" ? -1 : 1,
       )
-      .map((p) => ({ userId: p.user_id, displayName: p.users?.display_name ?? "", intention: p.intention })),
+      .map((p) => ({ userId: p.user_id, displayName: p.users?.display_name ?? "", intention: p.intention, departedAt: p.departed_at })),
   };
 }
 

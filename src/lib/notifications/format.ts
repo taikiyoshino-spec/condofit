@@ -46,6 +46,8 @@ export function formatNotification(n: NotificationRow): { text: string; sub?: st
         href: scheduleHref,
       };
     }
+    case "schedule_depart":
+      return { text: `${who}がFitに向けて出発しました`, sub: `${day(p.date)} ${slot(p.time_slot)}の予定`, href: scheduleHref };
     case "schedule_delete":
       return { text: `${who}が予定を削除しました`, sub: `${day(p.date)} ${slot(p.time_slot)}の予定`, href: scheduleHref };
     case "day_comment":

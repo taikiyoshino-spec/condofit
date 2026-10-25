@@ -2,11 +2,12 @@ import { notFound } from "next/navigation";
 import { requireMember } from "@/lib/auth/session";
 import { getSchedule } from "@/lib/schedule/queries";
 import { TIME_SLOT_LABEL } from "@/lib/schedule/time-slots";
-import { formatDate, todayJst } from "@/lib/date";
+import { formatDate, formatTimeJst, todayJst } from "@/lib/date";
 import { PageHeader, Section } from "@/components/page";
 import { RealtimeRefresh } from "@/components/realtime-refresh";
 import { TimeSlotIcon } from "@/components/time-slot-icon";
 import { CreatorControls, IntentionControl } from "./controls";
+import { DepartButton } from "../../depart-button";
 import { ParticipantList } from "@/components/participants";
 
 const UUID_RE = /^[0-9a-f-]{36}$/i;
@@ -37,7 +38,8 @@ export default async function ScheduleDetailPage({ params }: PageProps<"/schedul
 
   const going = schedule.participants.filter((p) => p.intention === "going");
   const maybe = schedule.participants.filter((p) => p.intention === "maybe");
-  const mine = schedule.participants.find((p) => p.userId === member.id)?.intention ?? null;
+  const me = schedule.participants.find((p) => p.userId === member.id);
+  const mine = me?.intention ?? null;
   const isCreator = schedule.creatorId === member.id;
 
   return (
@@ -73,6 +75,15 @@ export default async function ScheduleDetailPage({ params }: PageProps<"/schedul
         <p className="px-4 text-xs text-muted">過去の予定のため、参加意思の変更・編集はできません。</p>
       ) : (
         <>
+          {schedule.date === today && me && (
+            <Section title="出発">
+              <DepartButton
+                scheduleId={schedule.id}
+                others={schedule.participants.filter((p) => p.userId !== member.id).map((p) => p.displayName)}
+                departedLabel={me.departedAt ? formatTimeJst(me.departedAt) : null}
+              />
+            </Section>
+          )}
           <Section title="自分の参加意思">
             <IntentionControl scheduleId={schedule.id} current={mine} />
           </Section>

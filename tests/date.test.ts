@@ -4,6 +4,7 @@ import {
   addDays,
   addMonths,
   formatDate,
+  formatTimeJst,
   isValidDateString,
   monthGrid,
   monthRange,
@@ -44,4 +45,9 @@ test("月間カレンダー（2026年9月は火曜始まり・30日）", () => {
   assert.equal(days.length, 30);
   assert.equal(days.at(-1), "2026-09-30");
   assert.deepEqual(monthRange("2026-02"), { start: "2026-02-01", end: "2026-02-28" });
+});
+
+test("時刻は JST の「時:分」", () => {
+  assert.equal(formatTimeJst("2026-10-25T03:05:00Z"), "12:05");
+  assert.equal(formatTimeJst("2026-10-25T15:30:00Z"), "0:30");
 });

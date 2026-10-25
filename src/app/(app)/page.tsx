@@ -13,6 +13,7 @@ import { Avatar, MemberName } from "@/components/avatar";
 import { RankBadge } from "@/components/rank-badge";
 import { FitStatus } from "./fit-status";
 import { NextDays } from "./next-days";
+import { TodaySchedules } from "./today-schedules";
 import { NotificationBell } from "./notification-bell";
 import { RelativeTime } from "./relative-time";
 import { InstallPrompt } from "./install-prompt";
@@ -29,6 +30,10 @@ export default async function HomePage() {
     getRecentActivity(),
     getMonthlyRanking(monthOf(today)),
   ]);
+  // 今日の自分の予定（チェックイン中は「出発します」はいらないので出さない）
+  const todayMine = active.some((c) => c.userId === member.id)
+    ? []
+    : schedules.filter((s) => s.date === today && s.participants.some((p) => p.userId === member.id));
   const top = ranking.filter((r) => r.visits > 0).slice(0, 3);
 
   return (
@@ -41,6 +46,8 @@ export default async function HomePage() {
       <Suspense>
         <FitStatus initial={active} myId={member.id} aiReady={aiAvailable()} />
       </Suspense>
+
+      <TodaySchedules schedules={todayMine} myId={member.id} />
 
       <NextDays today={today} schedules={schedules} myId={member.id} />
 
