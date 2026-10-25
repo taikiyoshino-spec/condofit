@@ -45,9 +45,9 @@ export function CookMode({
   factor: number;
   people: number | null;
 }) {
-  // 0 = 材料、1..steps.length = 手順、steps.length + 1 = できあがり
+  // 0 = 材料、1..steps.length = 手順、steps.length + 1 = できあがり。材料はレシピ画面で見ているので手順1から始める（手順1で「前」を押すと材料）
   const last = steps.length + 1;
-  const [page, setPage] = useState(0);
+  const [page, setPage] = useState(steps.length > 0 ? 1 : 0);
   const [checked, setChecked] = useState<Set<number>>(new Set());
   const [timers, setTimers] = useState<Timer[]>([]);
   const [now, setNow] = useState(() => Date.now());
@@ -220,7 +220,7 @@ export function CookMode({
           {page === 0 && (
             <section>
               <h2 className="mb-1 text-xl font-bold">材料{people ? `（${people}人分）` : ""}</h2>
-              <p className="mb-3 text-xs text-muted">そろったものにチェック。画面の右側を押すと手順に進みます。</p>
+              <p className="mb-3 text-xs text-muted">そろったものにチェック。画面の右側を押すと手順1に戻ります。</p>
               <ul className="divide-y divide-border">
                 {ingredients.map((ing, i) => (
                   <li key={i}>
