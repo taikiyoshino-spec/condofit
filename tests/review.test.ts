@@ -66,3 +66,37 @@ test("ふりかえりの依頼文: 数字はまとめから。名前は入れな
   assert.match(p, /Fit 1回（前の月 1回）/);
   assert.match(p, /自己ベスト: ベンチプレス 52.5kg×10回（前は50kg×10回）/);
 });
+
+test("月のふりかえり: 前の月との部位・有酸素の比較、重さの流れ、通うペース", () => {
+  // 新しい順に渡しても古い順に並べ直して数える
+  const sessions = [
+    s("2026-09-28T01:00:00Z", bench(w(60, 8)), row(w(25, 10))),
+    s("2026-09-20T01:00:00Z", row(w(30, 10))),
+    s("2026-09-06T01:00:00Z", bench(w(55, 8)), row(w(30, 10))),
+    s("2026-09-02T01:00:00Z", bench(w(55, 8))),
+    s("2026-08-25T01:00:00Z", bench(w(50, 10), w(50, 10)), row(w(30, 10)), run(30, 4)),
+  ];
+  const f = monthReviewFacts(sessions, "2026-09", parts)!;
+  assert.deepEqual(f.prevParts, [{ name: "胸", sets: 2 }, { name: "背中", sets: 1 }]);
+  assert.deepEqual(f.prevCardio, { days: 1, minutes: 30 });
+  assert.deepEqual(f.weightChanges, [
+    { exercise: "ベンチプレス", from: "50kg×10回", to: "60kg×8回", up: true },
+    { exercise: "ローイング", from: "30kg×10回", to: "25kg×10回", up: false },
+  ], "前の月までの最後から、その月の最後まで。上がった種目が先");
+  assert.deepEqual(f.pace, { perWeek: 0.9, longestGap: { days: 14, from: "2026-09-06", to: "2026-09-20" } });
+  const lines = factLines(f);
+  assert.ok(lines.includes("通うペース: 週0.9回・いちばん空いたのは14日（9/6〜9/20）"));
+  assert.ok(lines.includes("筋トレ: 胸3セット（前の月2）・背中3セット（前の月1）"));
+  assert.ok(lines.includes("しなかった部位: 脚"));
+  assert.ok(lines.includes("有酸素: なし（前の月 1日・30分）"));
+  assert.ok(lines.includes("重さの流れ: ベンチプレス 50kg×10回→60kg×8回、ローイング 30kg×10回→25kg×10回"));
+});
+
+test("月のふりかえり: 記録を始めた月の重さの流れはその月の最初と最後。前に保存したふりかえり（新しい項目なし）も出せる", () => {
+  const f = monthReviewFacts([s("2026-09-01T01:00:00Z", bench(w(50, 10))), s("2026-09-15T01:00:00Z", bench(w(50, 12)))], "2026-09", parts)!;
+  assert.equal(f.prevParts, null);
+  assert.deepEqual(f.weightChanges, [{ exercise: "ベンチプレス", from: "50kg×10回", to: "50kg×12回", up: true }]);
+  assert.deepEqual(monthReviewFacts([s("2026-09-01T01:00:00Z", bench(w(50, 10)))], "2026-09", parts)!.pace, { perWeek: 0.2, longestGap: null });
+  const { prevParts: _a, prevCardio: _b, weightChanges: _c, pace: _d, ...old } = f;
+  assert.deepEqual(factLines(old), ["Fit 2回（記録を始めた月）", "筋トレ: 胸2セット", "しなかった部位: 背中・脚", "よくやった種目: ベンチプレス（2回）"]);
+});
