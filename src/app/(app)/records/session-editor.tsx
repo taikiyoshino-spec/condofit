@@ -415,7 +415,7 @@ export function SessionEditor({
           <div className="mt-2 h-2 overflow-hidden rounded-full bg-border" aria-hidden>
             <div className="h-full rounded-full bg-accent" style={{ width: `${(progress.finished / progress.total) * 100}%` }} />
           </div>
-          <p className="mt-2 text-xs text-muted">セットごとに「できた」か「できなかった」を押してください。押した分から自動で保存されます。</p>
+          <p className="mt-2 text-xs text-muted">セットごとに「できた」を押してください。予定と違ったとき（多くできた・少なかった）は「変えて記録」で直せます。押した分から自動で保存されます。</p>
         </section>
       )}
 

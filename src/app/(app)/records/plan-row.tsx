@@ -9,7 +9,7 @@ type Values = Pick<Row, "weight" | "reps" | "duration" | "distance">;
 
 /**
  * メニューの予定セット1行。
- * - 予定: 「できた」で予定どおり記録、「できなかった」で回数（と重さ）を直して記録。0回なら「やらなかった」
+ * - 予定: 「できた」で予定どおり記録、「変えて記録」で実際の重さ・回数に直して記録（予定より多くても少なくても）。0回なら「やらなかった」
  * - やらなかった: 記録には残さない。「元に戻す」で予定に戻せる
  */
 export function PlanRow({
@@ -55,7 +55,7 @@ export function PlanRow({
     return (
       <div className="space-y-2 rounded-lg border border-accent p-3">
         <p className="text-xs text-muted">
-          {setNumber}セット目（予定 {planText}）。実際にできたところまでに直してください。
+          {setNumber}セット目（予定 {planText}）。実際にやった重さ・回数に直してください。予定より多くできたときも、少なかったときも直せます。
         </p>
         {type === "weight" ? (
           <div className="flex items-center gap-2">
@@ -112,7 +112,7 @@ export function PlanRow({
         onClick={() => setAdjusting({ weight: row.weight, reps: row.reps, duration: row.duration, distance: row.distance })}
         className="rounded-lg border border-border px-2.5 py-1.5 text-xs"
       >
-        できなかった
+        変えて記録
       </button>
       <button type="button" onClick={() => onDone()} className="rounded-lg bg-accent px-3 py-1.5 text-xs font-semibold text-accent-fg">
         できた
