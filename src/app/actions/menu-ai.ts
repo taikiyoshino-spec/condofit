@@ -9,6 +9,7 @@ import {
   buildTodayPrompt,
   cleanMenuRequest,
   cleanTodayRequest,
+  completeWeightSets,
   GENERATE_SCHEMA,
   fitToTime,
   TODAY_PROPOSALS,
@@ -62,8 +63,13 @@ export async function generateMenuAction(raw: unknown, menuId: string | null): P
   // 貼り付けのときと同じ読み取りで、数字の範囲や数を確かめる
   const parsed = parseMenuText(JSON.stringify({ name: r.data.name, items: r.data.items }));
   if (!parsed.ok) return { ok: false, error: "AIの答えをメニューにできませんでした。もう一度試してください" };
+  // 重量系は「重さ×回数」にそろえる（AIが片方を省いたら前回の記録で補う）
+  const items = parsed.menu.items.map((it) => {
+    const hit = matchExercise(it.exercise, catalog.exercises);
+    return hit?.type === "weight" ? { ...it, sets: completeWeightSets(it.sets, history.lastEntries[hit.id]) } : it;
+  });
   const comment = String(r.data.comment ?? "").trim();
-  return { ok: true, menu: parsed.menu, comment: comment ? [...comment].slice(0, 200).join("") : null };
+  return { ok: true, menu: { ...parsed.menu, items }, comment: comment ? [...comment].slice(0, 200).join("") : null };
 }
 
 /** reason: AIが選んだ理由。minutes: 種目ごとの目安の時間（menu.items と同じ順） */
@@ -122,7 +128,8 @@ export async function generateTodayMenuAction(raw: unknown): Promise<TodayMenuRe
     parsed.menu.items.forEach((it, i) => {
       const hit = matchExercise(it.exercise, catalog.exercises);
       const minutes = Number(m?.items?.[i]?.minutes);
-      if (hit) matched.push({ exerciseId: hit.id, name: hit.name, type: hit.type, sets: it.sets, minutes: Number.isFinite(minutes) && minutes > 0 ? minutes : null });
+      const sets = hit?.type === "weight" ? completeWeightSets(it.sets, history.lastEntries[hit.id]) : it.sets;
+      if (hit) matched.push({ exerciseId: hit.id, name: hit.name, type: hit.type, sets, minutes: Number.isFinite(minutes) && minutes > 0 ? minutes : null });
       else dropped.push(it.exercise);
     });
     // AIが時間を守らないこともあるので、アプリでも1種目の時間と合計を合わせる

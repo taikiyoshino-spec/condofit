@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildGeneratePrompt, buildTodayPrompt, cleanMenuRequest, cleanTodayRequest, fitToTime } from "../src/lib/menus/generate.ts";
+import { buildGeneratePrompt, buildTodayPrompt, cleanMenuRequest, cleanTodayRequest, completeWeightSets, fitToTime } from "../src/lib/menus/generate.ts";
 
 test("メニュー作成の依頼: 目的・時間は決まった中から、部位はマスタの部位だけ、希望は200文字まで", () => {
   const parts = ["胸", "脚"];
@@ -64,4 +64,21 @@ test("時間に合わせる: 有酸素は10〜30分、筋トレは1種目5〜10�
   assert.deepEqual(cardio.map((x) => x.sets[0].duration_min), [30, 10, 20], "記録する時間も合わせる");
   assert.deepEqual(fitToTime([w(10), w(10), c(20)], 15).map((x) => x.minutes), [10, 10], "15分なら20分まで（5分の超過は許す）");
   assert.equal(fitToTime([c(30)], 15).length, 1, "1つは残す");
+});
+
+test("重量系のセットは「重さ×回数」にそろえる: 省かれた重さ・回数は前回の記録で、回数がなければ10回", () => {
+  const last = [
+    { weight_kg: 40, reps: 12, duration_min: null, distance_km: null },
+    { weight_kg: 45, reps: 8, duration_min: null, distance_km: null },
+  ];
+  assert.deepEqual(completeWeightSets([{ reps: 10 }, { reps: 10 }, { reps: 10 }], last), [
+    { weight_kg: 40, reps: 10 },
+    { weight_kg: 45, reps: 10 },
+    { weight_kg: 45, reps: 10 },
+  ]);
+  assert.deepEqual(completeWeightSets([{ weight_kg: 30 }, { weight_kg: 40 }], last), [
+    { weight_kg: 30, reps: 12 },
+    { weight_kg: 40, reps: 8 },
+  ]);
+  assert.deepEqual(completeWeightSets([{ weight_kg: 30 }, { reps: 15 }], undefined), [{ weight_kg: 30, reps: 10 }, { reps: 15 }], "前回がなければ重さは空のまま");
 });
