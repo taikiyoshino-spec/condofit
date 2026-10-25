@@ -5,7 +5,7 @@ import { generateTodayMenuAction, type TodayProposal } from "@/app/actions/menu-
 import { saveMenuAction } from "@/app/actions/menus";
 import { PageHeader } from "@/components/page";
 import { showToast } from "@/components/toaster";
-import { CONDITIONS, MENU_MINUTES, MENU_NOTE_MAX, type TodayRequest } from "@/lib/menus/generate";
+import { CARDIO_CHOICES, CONDITIONS, MENU_MINUTES, MENU_NOTE_MAX, type CardioChoice, type TodayRequest } from "@/lib/menus/generate";
 import type { Entry } from "@/lib/records/format";
 import type { Catalog } from "@/lib/records/queries";
 import { SessionEditor, type MenuForEditor } from "../session-editor";
@@ -34,6 +34,7 @@ export function TodayAi({
   checkedIn: boolean;
 }) {
   const [condition, setCondition] = useState<TodayRequest["condition"]>("いつもどおり");
+  const [cardio, setCardio] = useState<CardioChoice>("おまかせ");
   const [minutes, setMinutes] = useState(60);
   const [parts, setParts] = useState<string[]>([]);
   const [note, setNote] = useState("");
@@ -47,8 +48,11 @@ export function TodayAi({
   useEffect(() => {
     const t = setTimeout(() => {
       try {
-        const m = Number(JSON.parse(localStorage.getItem(PREFS_KEY) ?? "{}").minutes);
+        const prefs = JSON.parse(localStorage.getItem(PREFS_KEY) ?? "{}");
+        const m = Number(prefs.minutes);
         if ((MENU_MINUTES as readonly number[]).includes(m)) setMinutes(m);
+        const c = CARDIO_CHOICES.find((x) => x === prefs.cardio);
+        if (c) setCardio(c);
       } catch {
         // 覚えていなければ初期値のまま
       }
@@ -60,11 +64,11 @@ export function TodayAi({
     startTransition(async () => {
       setError(null);
       try {
-        localStorage.setItem(PREFS_KEY, JSON.stringify({ minutes }));
+        localStorage.setItem(PREFS_KEY, JSON.stringify({ minutes, cardio }));
       } catch {
         // 覚えられなくても続ける
       }
-      const r = await generateTodayMenuAction({ condition, minutes, parts, note }).catch(() => null);
+      const r = await generateTodayMenuAction({ condition, cardio, minutes, parts, note }).catch(() => null);
       if (!r) return setError("AIにつながりませんでした。時間をおいて試してください");
       if (!r.ok) return setError(r.error);
       setProposals(r.proposals);
@@ -204,6 +208,19 @@ export function TodayAi({
             })}
           </div>
           <p className="mt-1 text-xs text-muted">おまかせなら、最近やっていない部位を中心にします。</p>
+        </fieldset>
+        <fieldset className="mt-4">
+          <legend className="text-sm font-medium">有酸素は？</legend>
+          <div className="mt-1.5 flex flex-wrap gap-2">
+            {CARDIO_CHOICES.map((c) => (
+              <button key={c} type="button" aria-pressed={cardio === c} onClick={() => setCardio(c)} className={chip(cardio === c)}>
+                {c}
+              </button>
+            ))}
+          </div>
+          <p className="mt-1 text-xs text-muted">
+            {cardio === "多めに" ? "時間の半分くらいを有酸素にします。" : cardio === "する" ? "有酸素を1つ入れます。" : cardio === "しない" ? "筋トレだけにします。" : "時間と部位に合わせてAIが決めます。"}
+          </p>
         </fieldset>
         <fieldset className="mt-4">
           <legend className="text-sm font-medium">時間は？</legend>

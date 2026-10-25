@@ -133,7 +133,7 @@ export async function generateTodayMenuAction(raw: unknown): Promise<TodayMenuRe
       else dropped.push(it.exercise);
     });
     // AIが時間を守らないこともあるので、アプリでも1種目の時間と合計を合わせる
-    const fitted = fitToTime(matched, request.minutes);
+    const fitted = fitToTime(matched, request.minutes, request.cardio);
     if (fitted.length === 0) continue;
     const reason = String(m?.reason ?? "").trim();
     proposals.push({

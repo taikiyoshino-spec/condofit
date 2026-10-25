@@ -46,14 +46,16 @@ function timeRules(minutes: number): string[] {
 
 /**
  * AIの案を時間に合わせる。1種目の時間を決まりの範囲に収め、合計が選んだ時間を超えたら後ろの種目から外す（1つは残す）。
- * 有酸素の時間は記録の値（duration_min）を正にする
+ * 有酸素の時間は記録の値（duration_min）を正にする。
+ * 有酸素を「しない」なら有酸素の種目を外し、「する」「多めに」なら時間が超えたときに筋トレの種目から外す（有酸素を残す）
  */
 export function fitToTime<T extends { type: ExerciseType; minutes: number | null; sets: Partial<Entry>[] }>(
   items: T[],
   minutes: number,
+  cardio: CardioChoice = "おまかせ",
 ): (T & { minutes: number })[] {
   const clamp = (n: number, r: { min: number; max: number }) => Math.min(r.max, Math.max(r.min, Math.round(n)));
-  const fitted = items.map((it) => {
+  const fitted = items.filter((it) => cardio !== "しない" || it.type !== "cardio").map((it) => {
     if (it.type === "cardio") {
       const total = it.sets.reduce((sum, x) => sum + (x.duration_min ?? 0), 0);
       const m = clamp(total || it.minutes || 15, CARDIO_MINUTES);
@@ -63,7 +65,11 @@ export function fitToTime<T extends { type: ExerciseType; minutes: number | null
     }
     return { ...it, minutes: clamp(it.minutes ?? it.sets.length * 2, STRENGTH_MINUTES) };
   });
-  while (fitted.length > 1 && fitted.reduce((sum, it) => sum + it.minutes, 0) > minutes + OVER_MINUTES) fitted.pop();
+  const keepCardio = cardio === "する" || cardio === "多めに";
+  while (fitted.length > 1 && fitted.reduce((sum, it) => sum + it.minutes, 0) > minutes + OVER_MINUTES) {
+    const lastStrength = fitted.findLastIndex((it) => it.type !== "cardio");
+    fitted.splice(keepCardio && lastStrength >= 0 ? lastStrength : fitted.length - 1, 1);
+  }
   return fitted;
 }
 
@@ -145,7 +151,17 @@ const CONDITION_RULE: Record<(typeof CONDITIONS)[number], string> = {
   前回をこえる: "記録がある種目は前回をこえる（重さを5kg上げる、または同じ重さで回数を1〜2回増やす）",
 };
 
-export type TodayRequest = { condition: (typeof CONDITIONS)[number]; minutes: number; parts: string[]; note: string };
+/** 今日の有酸素。おまかせはAIが目的と時間から決める */
+export const CARDIO_CHOICES = ["おまかせ", "しない", "する", "多めに"] as const;
+export type CardioChoice = (typeof CARDIO_CHOICES)[number];
+const CARDIO_RULE: Record<CardioChoice, string> = {
+  おまかせ: "入れるかどうかは、時間とやりたい部位に合わせて決める",
+  しない: "有酸素の種目は入れない（筋トレだけにする）",
+  する: `有酸素の種目を1つ入れる（${CARDIO_MINUTES.min}〜20分くらい）。残りの時間は筋トレにする`,
+  多めに: `有酸素を多めにして、選んだ時間の半分くらいを有酸素にする（1種目${CARDIO_MINUTES.max}分まで。足りなければ有酸素の種目を2つに）。残りの時間は筋トレにする`,
+};
+
+export type TodayRequest = { condition: (typeof CONDITIONS)[number]; cardio: CardioChoice; minutes: number; parts: string[]; note: string };
 /** 部位ごとの直近4週間のセット数と、最後にやってから何日か（AIが「最近やっていない部位」を選べるように） */
 export type PartRecency = { name: string; sets: number; daysAgo: number | null };
 
@@ -157,7 +173,8 @@ export function cleanTodayRequest(raw: unknown, partNames: string[]): TodayReque
   if (!CONDITIONS.includes(condition) || !(MENU_MINUTES as readonly number[]).includes(minutes)) return null;
   const parts = Array.isArray(r.parts) ? [...new Set(r.parts.map(String))].filter((p) => partNames.includes(p)) : [];
   const note = [...String(r.note ?? "").trim()].slice(0, MENU_NOTE_MAX).join("");
-  return { condition, minutes, parts, note };
+  const cardio = CARDIO_CHOICES.find((c) => c === r.cardio) ?? "おまかせ";
+  return { condition, cardio, minutes, parts, note };
 }
 
 /** 今日のメニューの依頼文。名前は渡さず、強さ・希望・最近の記録の数字だけを渡す */
@@ -179,6 +196,7 @@ export function buildTodayPrompt({
     "【今日】",
     `- 強さ: ${request.condition}（${CONDITION_RULE[request.condition]}。強さは重さ・回数の決め方で、部位や種目の選び方は強さに関係なく決める）`,
     `- 時間: ${request.minutes}分くらい（準備・休憩を含む）`,
+    `- 有酸素: ${request.cardio}（${CARDIO_RULE[request.cardio]}。どの案もこれに合わせる）`,
     request.parts.length
       ? `- やりたい部位: ${request.parts.join("・")}`
       : "- やりたい部位: おまかせ（下の「部位ごとの最近」を見て、しばらくやっていない部位を中心に。前回と同じ部位ばかりにならないように）",

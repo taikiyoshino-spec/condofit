@@ -67,6 +67,19 @@ test("時間に合わせる: 有酸素は10〜30分、筋トレは1種目5〜10�
   assert.equal(fitToTime([c(30)], 15).length, 1, "1つは残す");
 });
 
+test("今日の有酸素: しない・する・多めに。選ばなければおまかせ。アプリでも守る", () => {
+  assert.equal(cleanTodayRequest({ condition: "いつもどおり", minutes: 60 }, [])!.cardio, "おまかせ");
+  assert.equal(cleanTodayRequest({ condition: "いつもどおり", minutes: 60, cardio: "毎日" }, [])!.cardio, "おまかせ");
+  const req = cleanTodayRequest({ condition: "いつもどおり", minutes: 60, cardio: "多めに" }, [])!;
+  assert.match(buildTodayPrompt({ request: req, exercises: [], recent: [], parts: [] }), /有酸素: 多めに（.*半分くらい/);
+
+  const w = (minutes: number) => ({ type: "weight" as const, minutes, sets: [{ weight_kg: 40, reps: 10 }] });
+  const c = (duration: number) => ({ type: "cardio" as const, minutes: duration, sets: [{ duration_min: duration }] });
+  assert.deepEqual(fitToTime([w(10), c(20), w(10)], 60, "しない").map((x) => x.type), ["weight", "weight"], "しないなら有酸素を外す");
+  assert.deepEqual(fitToTime([w(10), w(10), c(20)], 30, "する").map((x) => x.type), ["weight", "cardio"], "時間が超えたら筋トレから外す");
+  assert.deepEqual(fitToTime([w(10), w(10), c(20)], 30).map((x) => x.type), ["weight", "weight"], "おまかせなら後ろから");
+});
+
 test("重量系のセットは「重さ×回数」にそろえる: 省かれた重さ・回数は前回の記録で、回数がなければ10回", () => {
   const last = [
     { weight_kg: 40, reps: 12, duration_min: null, distance_km: null },
