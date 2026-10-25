@@ -7,7 +7,15 @@ export default async function MyPage() {
   const member = await requireMember();
   return (
     <>
-      <PageHeader title="マイページ" />
+      <PageHeader
+        title="マイページ"
+        action={
+          // CondoCook の「マイ」にある「CondoFit へ」と対
+          <Link href="/cook" className="rounded-full border border-border px-3 py-1.5 text-sm">
+            CondoCook へ <span aria-hidden>›</span>
+          </Link>
+        }
+      />
       <Link href="/mypage/profile" className="mx-4 mb-4 flex items-center gap-3 rounded-xl border border-border bg-surface p-4">
         <Avatar userId={member.id} name={member.displayName} size={56} />
         <span className="min-w-0 flex-1">
