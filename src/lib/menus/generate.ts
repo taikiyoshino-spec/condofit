@@ -233,15 +233,22 @@ function exerciseLine(e: GenerateExercise): string {
   return `- ${e.name}（${[...new Set([e.part, kind].filter(Boolean))].join("・")}）`;
 }
 
+/** from から to まで step 刻みの数字（文字）。AIの答えの選択肢にする */
+function choices(from: number, to: number, step: number): string[] {
+  return Array.from({ length: Math.round((to - from) / step) + 1 }, (_, i) => String(Math.round((from + i * step) * 10) / 10));
+}
+
 const SETS_SCHEMA = {
   type: "ARRAY",
   items: {
     type: "OBJECT",
     properties: {
-      weight_kg: { type: "NUMBER" },
-      reps: { type: "INTEGER" },
-      duration_min: { type: "NUMBER" },
-      distance_km: { type: "NUMBER" },
+      // 数字の型（NUMBER・INTEGER）にすると、AIが「15.000000…」「150000…」と0を書き続けて止まらなくなることがある。
+      // 決まった選択肢から選ばせて桁が伸びないようにする（読み取りは文字の数字も読める）
+      weight_kg: { type: "STRING", enum: choices(WEIGHT_STEP, 300, WEIGHT_STEP) },
+      reps: { type: "STRING", enum: choices(1, 50, 1) },
+      duration_min: { type: "STRING", enum: choices(1, 120, 1) },
+      distance_km: { type: "STRING", enum: choices(0.5, 30, 0.5) },
     },
   },
 };

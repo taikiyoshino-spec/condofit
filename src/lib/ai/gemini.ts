@@ -20,7 +20,7 @@ export type AiImage = { mimeType: string; base64: string };
 export type AiFeature = "cook_recipe_text" | "cook_recipe_image" | "cook_match" | "fit_review" | "fit_menu" | "fit_today";
 
 /** 失敗の理由（画面に出す。キーや送った内容は含めない） */
-export type AiFailure = "no_key" | "timeout" | "quota" | "model" | "rejected" | "empty" | "too_long" | "network";
+export type AiFailure = "no_key" | "timeout" | "quota" | "model" | "busy" | "rejected" | "empty" | "too_long" | "network";
 export type AiResult<T> = { ok: true; data: T } | { ok: false; reason: AiFailure; status?: number };
 
 export const AI_FAILURE_MESSAGE: Record<AiFailure, string> = {
@@ -28,6 +28,7 @@ export const AI_FAILURE_MESSAGE: Record<AiFailure, string> = {
   timeout: "AIの返事が時間内に来ませんでした。少し待ってからもう一度試してください",
   quota: "AIの無料枠の上限に達しました。時間をおいて試してください",
   model: "AIのモデルが見つかりませんでした（設定の確認が必要です）",
+  busy: "AIが混み合っています。少し待ってからもう一度試してください",
   rejected: "AIへの送信が受け付けられませんでした",
   empty: "AIから答えが返ってきませんでした",
   too_long: "AIの答えが長くなりすぎて途中で止まりました。もう一度試してください",
@@ -86,13 +87,15 @@ type JsonOptions = {
 };
 
 /** 作り直せば通るかもしれない失敗 */
-const RETRYABLE: AiFailure[] = ["timeout", "too_long", "empty"];
+const RETRYABLE: AiFailure[] = ["timeout", "too_long", "empty", "busy"];
 
 /** JSONで答えてもらう（responseSchema で形を指定）。画像も一緒に渡せる。失敗したときは理由を返す */
 export async function geminiJsonResult<T>(prompt: string, schema: object, { retries = 0, ...options }: JsonOptions): Promise<AiResult<T>> {
   let r = await geminiJsonOnce<T>(prompt, schema, options);
   for (let i = 0; i < retries && !r.ok && RETRYABLE.includes(r.reason); i++) {
     console.error("gemini retry", options.feature, r.reason);
+    // 混み合いはすぐ送り直しても断られやすいので、少し間をあける
+    if (r.reason === "busy") await new Promise((done) => setTimeout(done, 1500));
     r = await geminiJsonOnce<T>(prompt, schema, options);
   }
   return r;
@@ -131,7 +134,7 @@ async function geminiJsonOnce<T>(
     if (!res.ok) {
       // 原因を Vercel のログで追えるように、エラーの先頭だけ残す（キーや本文は出さない）
       console.error("gemini failed", res.status, (await res.text().catch(() => "")).slice(0, 300));
-      return fail(res.status === 404 ? "model" : res.status === 429 ? "quota" : "rejected", res.status);
+      return fail(res.status === 404 ? "model" : res.status === 429 ? "quota" : res.status === 503 ? "busy" : "rejected", res.status);
     }
     const data = (await res.json()) as {
       candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] }; finishReason?: string }[];

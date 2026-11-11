@@ -56,11 +56,11 @@ export async function generateMenuAction(raw: unknown, menuId: string | null): P
 
   const r = await geminiJsonResult<{ name?: string; comment?: string; items?: unknown }>(prompt, GENERATE_SCHEMA, {
     feature: "fit_menu",
-    // ふつうは数秒で返る。くり返して止まらないときは上限で打ち切り、1回だけ作り直す（2回でも画面の上限60秒に収まる）
-    timeoutMs: 25000,
+    // ふつうは数秒で返る。止まらない・混み合いのときは2回まで作り直す（3回でも画面の上限60秒に収まる）
+    timeoutMs: 15000,
     temperature: 0.6,
     maxOutputTokens: 2048,
-    retries: 1,
+    retries: 2,
   });
   if (!r.ok) return { ok: false, error: AI_FAILURE_MESSAGE[r.reason] };
   // 貼り付けのときと同じ読み取りで、数字の範囲や数を確かめる
@@ -117,11 +117,11 @@ export async function generateTodayMenuAction(raw: unknown): Promise<TodayMenuRe
   type RawItem = { exercise?: unknown; minutes?: unknown; sets?: unknown };
   const r = await geminiJsonResult<{ menus?: { name?: string; reason?: string; items?: RawItem[] }[] }>(prompt, TODAY_SCHEMA, {
     feature: "fit_today",
-    // ふつうは3案で500トークンほど・数秒で返る。くり返して止まらないときは上限で打ち切り、1回だけ作り直す（2回でも画面の上限60秒に収まる）
-    timeoutMs: 25000,
+    // ふつうは3案で1000トークンほど・2〜3秒で返る。止まらない・混み合いのときは2回まで作り直す（3回でも画面の上限60秒に収まる）
+    timeoutMs: 15000,
     temperature: 0.8,
     maxOutputTokens: 3072,
-    retries: 1,
+    retries: 2,
   });
   if (!r.ok) return { ok: false, error: AI_FAILURE_MESSAGE[r.reason] };
 
