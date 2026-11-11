@@ -233,8 +233,10 @@ function exerciseLine(e: GenerateExercise): string {
   return `- ${e.name}（${[...new Set([e.part, kind].filter(Boolean))].join("・")}）`;
 }
 
+// 数の上限（AIが同じ種目やセットを並べ続けないように）
 const SETS_SCHEMA = {
   type: "ARRAY",
+  maxItems: 10,
   items: {
     type: "OBJECT",
     properties: {
@@ -254,6 +256,7 @@ export const GENERATE_SCHEMA = {
     comment: { type: "STRING" },
     items: {
       type: "ARRAY",
+      maxItems: 15,
       items: {
         type: "OBJECT",
         properties: {
@@ -274,6 +277,7 @@ export const TODAY_SCHEMA = {
   properties: {
     menus: {
       type: "ARRAY",
+      maxItems: TODAY_PROPOSALS,
       items: {
         type: "OBJECT",
         properties: {
@@ -281,6 +285,7 @@ export const TODAY_SCHEMA = {
           reason: { type: "STRING" },
           items: {
             type: "ARRAY",
+            maxItems: 15,
             items: {
               type: "OBJECT",
               properties: { exercise: { type: "STRING" }, minutes: { type: "INTEGER" }, sets: SETS_SCHEMA },

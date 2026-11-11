@@ -20,7 +20,7 @@ export type AiImage = { mimeType: string; base64: string };
 export type AiFeature = "cook_recipe_text" | "cook_recipe_image" | "cook_match" | "fit_review" | "fit_menu" | "fit_today";
 
 /** 失敗の理由（画面に出す。キーや送った内容は含めない） */
-export type AiFailure = "no_key" | "timeout" | "quota" | "model" | "rejected" | "empty" | "network";
+export type AiFailure = "no_key" | "timeout" | "quota" | "model" | "rejected" | "empty" | "too_long" | "network";
 export type AiResult<T> = { ok: true; data: T } | { ok: false; reason: AiFailure; status?: number };
 
 export const AI_FAILURE_MESSAGE: Record<AiFailure, string> = {
@@ -30,6 +30,7 @@ export const AI_FAILURE_MESSAGE: Record<AiFailure, string> = {
   model: "AIのモデルが見つかりませんでした（設定の確認が必要です）",
   rejected: "AIへの送信が受け付けられませんでした",
   empty: "AIから答えが返ってきませんでした",
+  too_long: "AIの答えが長くなりすぎて途中で止まりました。もう一度試してください",
   network: "AIにつながりませんでした",
 };
 
@@ -73,11 +74,34 @@ async function logUsage(row: {
   }
 }
 
+type JsonOptions = {
+  feature: AiFeature;
+  images?: AiImage[];
+  timeoutMs?: number;
+  temperature?: number;
+  /** 答えの長さの上限（トークン）。AIが同じ内容をくり返して止まらなくなることがあるので、時間切れになる前に打ち切る */
+  maxOutputTokens?: number;
+  /** 時間切れ・長すぎ・空の答えのときに作り直す回数（くり返しは毎回起きるわけではないので、もう一度で通ることが多い） */
+  retries?: number;
+};
+
+/** 作り直せば通るかもしれない失敗 */
+const RETRYABLE: AiFailure[] = ["timeout", "too_long", "empty"];
+
 /** JSONで答えてもらう（responseSchema で形を指定）。画像も一緒に渡せる。失敗したときは理由を返す */
-export async function geminiJsonResult<T>(
+export async function geminiJsonResult<T>(prompt: string, schema: object, { retries = 0, ...options }: JsonOptions): Promise<AiResult<T>> {
+  let r = await geminiJsonOnce<T>(prompt, schema, options);
+  for (let i = 0; i < retries && !r.ok && RETRYABLE.includes(r.reason); i++) {
+    console.error("gemini retry", options.feature, r.reason);
+    r = await geminiJsonOnce<T>(prompt, schema, options);
+  }
+  return r;
+}
+
+async function geminiJsonOnce<T>(
   prompt: string,
   schema: object,
-  { feature, images = [], timeoutMs = TIMEOUT_MS, temperature = 0.1 }: { feature: AiFeature; images?: AiImage[]; timeoutMs?: number; temperature?: number },
+  { feature, images = [], timeoutMs = TIMEOUT_MS, temperature = 0.1, maxOutputTokens }: Omit<JsonOptions, "retries">,
 ): Promise<AiResult<T>> {
   const key = process.env.GEMINI_API_KEY;
   if (!key) return { ok: false, reason: "no_key" };
@@ -89,7 +113,7 @@ export async function geminiJsonResult<T>(
         parts: [...images.map((i) => ({ inline_data: { mime_type: i.mimeType, data: i.base64 } })), { text: prompt }],
       },
     ],
-    generationConfig: { responseMimeType: "application/json", responseSchema: schema, temperature },
+    generationConfig: { responseMimeType: "application/json", responseSchema: schema, temperature, ...(maxOutputTokens ? { maxOutputTokens } : {}) },
   });
   const started = Date.now();
   const fail = async (reason: AiFailure, status?: number, usage?: Usage): Promise<AiResult<T>> => {
@@ -110,7 +134,7 @@ export async function geminiJsonResult<T>(
       return fail(res.status === 404 ? "model" : res.status === 429 ? "quota" : "rejected", res.status);
     }
     const data = (await res.json()) as {
-      candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] } }[];
+      candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] }; finishReason?: string }[];
       usageMetadata?: Usage;
     };
     const text =
@@ -120,6 +144,8 @@ export async function geminiJsonResult<T>(
         .join("") ?? "";
     // かかった時間をログに残す（遅いときの原因を Vercel のログで追えるように）
     console.log("gemini ok", feature, model, `${Date.now() - started}ms`, images.length ? `images=${images.length}` : "text");
+    // 上限で打ち切られた答えは JSON が途中までなので使えない
+    if (data.candidates?.[0]?.finishReason === "MAX_TOKENS") return fail("too_long", undefined, data.usageMetadata);
     if (!text) return fail("empty", undefined, data.usageMetadata);
     let parsed: T;
     try {
@@ -140,7 +166,7 @@ export async function geminiJsonResult<T>(
 export async function geminiJson<T>(
   prompt: string,
   schema: object,
-  options: { feature: AiFeature; images?: AiImage[]; timeoutMs?: number },
+  options: JsonOptions,
 ): Promise<T | null> {
   const r = await geminiJsonResult<T>(prompt, schema, options);
   return r.ok ? r.data : null;
