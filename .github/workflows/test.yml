@@ -1,0 +1,33 @@
+# main への push とプルリクエストのたびに、型チェック・lint・テスト（単体 + DB）を流す。
+# 本番デプロイは Vercel の Git 連携が別に行う（ここではデプロイしない）。
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          # テストは node --test で .ts をそのまま動かすため、型を外して実行できる Node 24 にする
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: 型チェック
+        # PageProps などのルートの型は .next/types に生成されるため、先に作る
+        run: npx next typegen && npx tsc --noEmit
+      - name: lint
+        run: npm run lint
+      - name: テスト（単体 + DB）
+        run: npm test
