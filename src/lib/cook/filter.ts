@@ -11,6 +11,7 @@ export const FEATURES = [
   { key: "kids", tag: "子供向け", hint: "子どもが食べやすい" },
   { key: "noknife", tag: "包丁不要", hint: "包丁・まな板を使わない" },
   { key: "nopan", tag: "フライパン不要", hint: "レンジや鍋だけで作れる" },
+  { key: "airfryer", tag: "ノンフライヤー", hint: "ノンフライヤーで作る" },
 ] as const;
 export type FeatureKey = (typeof FEATURES)[number]["key"];
 

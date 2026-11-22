@@ -57,3 +57,15 @@ test("parseFeatureKeys / toggleFeatureKey / recipeFeatures", () => {
   assert.equal(toggleFeatureKey(["kids"], "kids"), null);
   assert.deepEqual(recipeFeatures({ tags: ["包丁不要", "簡単"] }).map((f) => f.tag), ["包丁不要"]);
 });
+
+test("特徴: ノンフライヤーで絞り込み・表示・?f= の往復", () => {
+  const rows = [
+    { id: "a", title: "唐揚げ", ownerId: "me", categoryId: null, tags: ["ノンフライヤー"], ingredientNames: [] },
+    { id: "b", title: "煮物", ownerId: "me", categoryId: null, tags: [], ingredientNames: [] },
+  ];
+  assert.deepEqual(parseFeatureKeys("airfryer"), ["airfryer"]);
+  assert.equal(toggleFeatureKey([], "airfryer"), "airfryer");
+  assert.deepEqual(recipeFeatures({ tags: ["ノンフライヤー"] }).map((f) => f.tag), ["ノンフライヤー"]);
+  const opt = { scope: "all" as const, q: "", categoryId: null, myId: "me", householdIds: ["me"] };
+  assert.deepEqual(filterRecipes(rows, { ...opt, features: ["airfryer"] }).map((r) => r.id), ["a"]);
+});
