@@ -91,7 +91,7 @@ export async function getMonthRepresentatives(exercise: Exercise): Promise<Ranke
   const rows = (data as Record<string, unknown>[]).map((r) => ({
     userId: r.user_id as string,
     displayName: r.display_name as string,
-    value: { weight_kg: n(r.weight_kg), reps: n(r.reps), duration_min: n(r.duration_min), distance_km: n(r.distance_km) },
+    value: { weight_kg: n(r.weight_kg), reps: n(r.reps), duration_min: n(r.duration_min), distance_km: n(r.distance_km), load: n(r.load) },
   }));
   const compare =
     exercise.type === "weight"
@@ -108,7 +108,7 @@ export async function getMyExerciseHistory(userId: string, exercise: Exercise): 
   const { data, error } = await supabase
     .from("training_sessions")
     .select(
-      "id, performed_at, session_exercises!inner(exercise_id, display_order, exercise_entries(display_order, weight_kg, reps, duration_min, distance_km))",
+      "id, performed_at, session_exercises!inner(exercise_id, display_order, exercise_entries(display_order, weight_kg, reps, duration_min, distance_km, load))",
     )
     .eq("user_id", userId)
     .eq("session_exercises.exercise_id", exercise.id)
@@ -126,7 +126,7 @@ export async function getMyExerciseHistory(userId: string, exercise: Exercise): 
     const entries = [...s.session_exercises]
       .sort((a, b) => a.display_order - b.display_order)
       .flatMap((se) => [...se.exercise_entries].sort((a, b) => a.display_order - b.display_order))
-      .map((e) => ({ weight_kg: n(e.weight_kg), reps: n(e.reps), duration_min: n(e.duration_min), distance_km: n(e.distance_km) }));
+      .map((e) => ({ weight_kg: n(e.weight_kg), reps: n(e.reps), duration_min: n(e.duration_min), distance_km: n(e.distance_km), load: n(e.load) }));
     return { sessionId: s.id, date: jstDateOf(s.performed_at), value: sessionRepresentative(exercise.type, entries), entries };
   });
 }

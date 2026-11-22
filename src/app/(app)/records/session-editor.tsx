@@ -297,7 +297,7 @@ export function SessionEditor({
     );
 
   /** 複数の値をまとめて変更（有酸素で時間と距離を同時に変えるときなど） */
-  const setFields = (key: number, rowIndex: number, values: Partial<Pick<Row, "duration" | "distance">>) =>
+  const setFields = (key: number, rowIndex: number, values: Partial<Pick<Row, "duration" | "distance" | "load">>) =>
     update(
       key,
       (blk) => ({ ...blk, rows: blk.rows.map((row, k) => (k === rowIndex ? { ...row, ...values } : row)) }),
@@ -494,6 +494,7 @@ export function SessionEditor({
                           <CardioInputs
                             duration={r.duration}
                             distance={r.distance}
+                            load={r.load}
                             onChange={(v) => setFields(b.key, j, v)}
                             onBlur={flush}
                           />

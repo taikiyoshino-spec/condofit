@@ -27,6 +27,7 @@ function setText(s: Partial<Entry>): string {
   if (s.reps != null) parts.push(`${s.reps}回`);
   if (s.duration_min != null) parts.push(`${s.duration_min}分`);
   if (s.distance_km != null) parts.push(`${s.distance_km}km`);
+  if (s.load != null) parts.push(`負荷${s.load}`);
   return parts.join("×") || "—";
 }
 

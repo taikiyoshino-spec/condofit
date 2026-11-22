@@ -15,9 +15,12 @@ export function NumberInput({
   onBlur,
   decimal = false,
   placeholder = "—",
+  prefix,
 }: {
   label: string;
   unit: string;
+  /** 入力欄の左に出す短い見出し（単位のない値で、何の数字か分かるように） */
+  prefix?: string;
   value: string;
   onChange: (v: string) => void;
   onBlur?: () => void;
@@ -27,6 +30,7 @@ export function NumberInput({
   return (
     <label className="flex min-w-0 flex-1 items-center gap-1 rounded-lg border border-border px-2 focus-within:border-accent">
       <span className="sr-only">{label}</span>
+      {prefix && <span className="shrink-0 text-sm text-muted" aria-hidden>{prefix}</span>}
       <input
         type="text"
         inputMode={decimal ? "decimal" : "numeric"}
@@ -228,19 +232,22 @@ function ExerciseList({ items, onPick }: { items: CatalogExercise[]; onPick: (ex
 }
 
 /**
- * 有酸素の入力（時間・距離）＋時速から距離を自動計算する補助。
+ * 有酸素の入力（時間・距離・負荷）＋時速から距離を自動計算する補助。
  * 時速を選ぶ・上下すると「時速 × 時間」で距離を入れる（途中で速度を変えなかった前提）。
  * 距離を手で直したら自動計算はやめる。時速は保存しない（距離を出すための補助）。
  */
 export function CardioInputs({
   duration,
   distance,
+  load,
   onChange,
   onBlur,
 }: {
   duration: string;
   distance: string;
-  onChange: (values: { duration?: string; distance?: string }) => void;
+  /** 負荷（任意。バイクの負荷レベル・傾斜などマシンの数字） */
+  load: string;
+  onChange: (values: { duration?: string; distance?: string; load?: string }) => void;
   onBlur?: () => void;
 }) {
   const [speed, setSpeed] = useState(() => speedFrom(duration, distance));
@@ -276,6 +283,7 @@ export function CardioInputs({
             onChange({ distance: v });
           }}
         />
+        <NumberInput label="負荷" prefix="負荷" unit="" value={load} onBlur={onBlur} decimal onChange={(v) => onChange({ load: v })} />
       </div>
       <div className="flex flex-wrap items-center gap-1 text-xs">
         <span className="text-muted">時速</span>

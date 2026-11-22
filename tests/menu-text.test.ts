@@ -16,7 +16,7 @@ test("parseMenuText: 説明文と ```json に囲まれた答えから読み取�
   const r = parseMenuText(text);
   assert.ok(r.ok);
   assert.equal(r.menu.name, "胸の日");
-  assert.deepEqual(r.menu.items[0].sets[1], { weight_kg: 42.5, reps: 8, duration_min: null, distance_km: null });
+  assert.deepEqual(r.menu.items[0].sets[1], { weight_kg: 42.5, reps: 8, duration_min: null, distance_km: null, load: null });
   assert.equal(r.menu.items[1].sets[0].duration_min, 20);
 });
 
@@ -69,4 +69,12 @@ test("guessType / buildMenuPrompt", () => {
   assert.ok(p.includes("【今のメニュー】"));
   assert.ok(p.includes("- ベンチプレス: 40kg×10回"));
   assert.ok(parseMenuText(p).ok, "相談文の中の例もそのまま読める形");
+});
+
+test("有酸素の負荷: menuToJson → parseMenuText で残り、負荷だけでも有酸素と推測", () => {
+  const json = menuToJson({ name: "バイク", items: [{ name: "アップライトバイク", sets: [{ duration_min: 20, load: 8 }] }] });
+  const parsed = parseMenuText(json);
+  assert.ok(parsed.ok);
+  if (parsed.ok) assert.equal(parsed.menu.items[0].sets[0].load, 8);
+  assert.equal(guessType([{ load: 5 }]), "cardio");
 });

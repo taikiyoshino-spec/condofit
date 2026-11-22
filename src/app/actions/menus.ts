@@ -37,6 +37,7 @@ export async function saveMenuAction(menuId: string | null, input: MenuInput): P
       reps: clean(s.reps, { integer: true }),
       duration_min: clean(s.duration_min),
       distance_km: clean(s.distance_km, { max: 999 }),
+      load: clean(s.load, { max: 999 }),
     }));
     items.push({ exercise_id: it.exerciseId, sets });
   }

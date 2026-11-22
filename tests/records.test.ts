@@ -2,8 +2,14 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { formatEntry, fromJstInputValue, jstDateOf, parseNumber, toJstInputValue } from "../src/lib/records/format.ts";
 
-const e = (weight_kg: number | null, reps: number | null, duration_min: number | null = null, distance_km: number | null = null) =>
-  ({ weight_kg, reps, duration_min, distance_km });
+const e = (
+  weight_kg: number | null,
+  reps: number | null,
+  duration_min: number | null = null,
+  distance_km: number | null = null,
+  load: number | null = null,
+) =>
+  ({ weight_kg, reps, duration_min, distance_km, load });
 
 test("重量系の表示（片方だけ・なしも可）", () => {
   assert.equal(formatEntry("weight", e(60, 5)), "60kg × 5回");
@@ -52,4 +58,16 @@ test("代表値: 有酸素は合計時間 + 合計距離（片方だけなら存
   assert.deepEqual(sessionRepresentative("cardio", [c(20, null), c(null, 2)]), c(20, 2));
   assert.deepEqual(sessionRepresentative("cardio", [c(15, null)]), c(15, null));
   assert.equal(sessionRepresentative("cardio", [c(null, null)]), null);
+});
+
+test("有酸素の負荷: 表示に「負荷」を付け、代表値は合計せずその日のいちばん高い値", () => {
+  assert.equal(formatEntry("cardio", e(null, null, 20, 1.5, 8)), "20分 / 1.5km / 負荷8");
+  assert.equal(formatEntry("cardio", e(null, null, 20, null, 3.5)), "20分 / 負荷3.5");
+  assert.equal(formatEntry("cardio", e(null, null, null, null, 10)), "負荷10");
+  assert.deepEqual(
+    sessionRepresentative("cardio", [e(null, null, 10, null, 5), e(null, null, 10, null, 8), e(null, null, 5, null, null)]),
+    e(null, null, 25, null, 8),
+  );
+  assert.deepEqual(sessionRepresentative("cardio", [e(null, null, null, null, 6)]), e(null, null, null, null, 6));
+  assert.equal(sessionRepresentative("weight", [e(60, 5, null, null, 9)])?.load, null);
 });

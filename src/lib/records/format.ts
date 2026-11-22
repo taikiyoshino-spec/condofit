@@ -6,11 +6,13 @@ export type Entry = {
   reps: number | null;
   duration_min: number | null;
   distance_km: number | null;
+  /** 有酸素の負荷（任意。バイクの負荷レベル・傾斜など、マシンの数字そのまま） */
+  load: number | null;
 };
 
 const num = (n: number) => String(Number(n)); // 60.0 → "60"
 
-/** 1行分の表示。重量系「60kg × 5回」、有酸素「20分 / 1.5km」。数値なしは null */
+/** 1行分の表示。重量系「60kg × 5回」、有酸素「20分 / 1.5km / 負荷8」。数値なしは null */
 export function formatEntry(type: ExerciseType, e: Entry): string | null {
   if (type === "weight") {
     const w = e.weight_kg !== null ? `${num(e.weight_kg)}kg` : null;
@@ -19,7 +21,9 @@ export function formatEntry(type: ExerciseType, e: Entry): string | null {
   }
   const d = e.duration_min !== null ? `${num(e.duration_min)}分` : null;
   const k = e.distance_km !== null ? `${num(e.distance_km)}km` : null;
-  return d && k ? `${d} / ${k}` : (d ?? k);
+  const l = e.load != null ? `負荷${num(e.load)}` : null;
+  const parts = [d, k, l].filter((x) => x !== null);
+  return parts.length ? parts.join(" / ") : null;
 }
 
 /** 入力欄の文字列 → 数値（空欄・不正は null、負数は不可、上限あり） */
@@ -70,7 +74,7 @@ export function sessionRepresentative(type: ExerciseType, entries: Entry[]): Ent
       if (bw !== aw) return bw > aw ? b : a;
       return (b.reps ?? -1) > (a.reps ?? -1) ? b : a;
     });
-    return { weight_kg: best.weight_kg, reps: best.reps, duration_min: null, distance_km: null };
+    return { weight_kg: best.weight_kg, reps: best.reps, duration_min: null, distance_km: null, load: null };
   }
   const sum = (key: "duration_min" | "distance_km") => {
     const values = entries.map((e) => e[key]).filter((v): v is number => v !== null);
@@ -78,6 +82,9 @@ export function sessionRepresentative(type: ExerciseType, entries: Entry[]): Ent
   };
   const duration = sum("duration_min");
   const distance = sum("distance_km");
-  if (duration === null && distance === null) return null;
-  return { weight_kg: null, reps: null, duration_min: duration, distance_km: distance };
+  // 負荷は合計せず、その日のいちばん高い値
+  const loads = entries.map((e) => e.load).filter((v): v is number => v != null);
+  const load = loads.length ? Math.max(...loads) : null;
+  if (duration === null && distance === null && load === null) return null;
+  return { weight_kg: null, reps: null, duration_min: duration, distance_km: distance, load };
 }

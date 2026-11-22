@@ -15,8 +15,8 @@ test("保存するのは「できた」行だけ。できた行のない種目�
     block("c", [entryToRow({})]), // 手で追加した数値なしの行は「やった」として残す
   ];
   assert.deepEqual(blocksToExercises(blocks), [
-    { exerciseId: "a", entries: [{ weight_kg: 50, reps: 10, duration_min: null, distance_km: null }] },
-    { exerciseId: "c", entries: [{ weight_kg: null, reps: null, duration_min: null, distance_km: null }] },
+    { exerciseId: "a", entries: [{ weight_kg: 50, reps: 10, duration_min: null, distance_km: null, load: null }] },
+    { exerciseId: "c", entries: [{ weight_kg: null, reps: null, duration_min: null, distance_km: null, load: null }] },
   ]);
 });
 
@@ -70,4 +70,14 @@ test("メニューより重い重量でできたセットだけを、メニュ�
   assert.deepEqual(menuWeightIncreases(blocks), [{ item: 0, set: 0, exerciseId: "a", name: "A", from: 40, to: 42.5 }]);
   blocks[0].rows[0] = { ...blocks[0].rows[0], status: "skipped" };
   assert.deepEqual(menuWeightIncreases(blocks), []);
+});
+
+test("有酸素の負荷: 行と記録の間で行き来でき、端末に覚えた古い行（load なし）でも読める", () => {
+  const row = entryToRow({ duration_min: 20, distance_km: null, load: 7.5 });
+  assert.equal(row.load, "7.5");
+  const blocks: Block[] = [{ key: 1, exerciseId: "x", name: "バイク", type: "cardio", rows: [row] }];
+  assert.equal(blocksToExercises(blocks)[0].entries[0].load, 7.5);
+  const old = { weight: "", reps: "", duration: "10", distance: "", status: "done" } as unknown as Block["rows"][number];
+  const oldBlocks: Block[] = [{ key: 2, exerciseId: "x", name: "バイク", type: "cardio", rows: [old] }];
+  assert.equal(blocksToExercises(oldBlocks)[0].entries[0].load, null);
 });

@@ -17,7 +17,7 @@ export function menuToJson(menu: { name: string; items: { name: string; sets: Pa
     exercise: it.name,
     sets: it.sets.map((s) =>
       Object.fromEntries(
-        (["weight_kg", "reps", "duration_min", "distance_km"] as const)
+        (["weight_kg", "reps", "duration_min", "distance_km", "load"] as const)
           .map((k) => [k, fmt(s[k])] as const)
           .filter(([, v]) => v !== null),
       ),
@@ -32,6 +32,7 @@ function setText(s: Partial<Entry>): string {
   if (s.reps != null) parts.push(`${s.reps}回`);
   if (s.duration_min != null) parts.push(`${s.duration_min}分`);
   if (s.distance_km != null) parts.push(`${s.distance_km}km`);
+  if (s.load != null) parts.push(`負荷${s.load}`);
   return parts.join("×") || "—";
 }
 
@@ -85,7 +86,7 @@ export function buildMenuPrompt({
       2,
     ),
     "```",
-    "- 重量系は weight_kg（kg）と reps（回）、有酸素は duration_min（分）と distance_km（km）",
+    "- 重量系は weight_kg（kg）と reps（回）、有酸素は duration_min（分）と distance_km（km）と load（負荷。マシンの負荷レベルなどの数字。なければ省く）",
     "- weight_kg は5kg単位にする（5, 10, 15, 20 …）",
     `- 種目は${MAX_ITEMS}まで、1種目のセットは${MAX_SETS}まで`,
   );
@@ -137,6 +138,7 @@ export function parseMenuText(text: string): { ok: true; menu: TextMenu } | { ok
         reps: num(v.reps, { integer: true }),
         duration_min: num(v.duration_min),
         distance_km: num(v.distance_km, { max: 999 }),
+        load: num(v.load, { max: 999 }),
       };
     });
     items.push({ exercise, sets });
@@ -158,7 +160,7 @@ export function matchExercise<T extends { name: string; custom: boolean }>(name:
 
 /** 読み取ったセットから、新しく作る種目のタイプを推測（時間・距離だけなら有酸素） */
 export function guessType(sets: Partial<Entry>[]): ExerciseType {
-  const cardio = sets.some((s) => s.duration_min != null || s.distance_km != null);
+  const cardio = sets.some((s) => s.duration_min != null || s.distance_km != null || s.load != null);
   const weight = sets.some((s) => s.weight_kg != null || s.reps != null);
   return cardio && !weight ? "cardio" : "weight";
 }

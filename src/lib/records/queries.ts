@@ -51,6 +51,7 @@ function toSession(r: Row): Session {
             reps: toNumber(e.reps),
             duration_min: toNumber(e.duration_min),
             distance_km: toNumber(e.distance_km),
+            load: toNumber(e.load),
           })),
       })),
   };
@@ -58,7 +59,7 @@ function toSession(r: Row): Session {
 
 const DETAIL = `id, user_id, performed_at,
   session_exercises(exercise_id, display_order, exercises(name, type),
-    exercise_entries(display_order, weight_kg, reps, duration_min, distance_km))`;
+    exercise_entries(display_order, weight_kg, reps, duration_min, distance_km, load))`;
 
 /** 自分の記録（新しい順）。日付一覧用なのでエントリは含めない */
 export async function listMySessions(userId: string, limit = 200): Promise<Session[]> {

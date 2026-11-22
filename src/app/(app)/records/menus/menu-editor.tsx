@@ -126,6 +126,7 @@ export function MenuEditor({
                       <CardioInputs
                         duration={r.duration}
                         distance={r.distance}
+                        load={r.load}
                         onChange={(v) =>
                           update(b.key, (blk) => ({ ...blk, rows: blk.rows.map((row, k) => (k === j ? { ...row, ...v } : row)) }))
                         }

@@ -10,8 +10,8 @@ import {
   summarizeProgress,
 } from "../src/lib/records/progress.ts";
 
-const w = (weight_kg: number | null, reps: number | null) => ({ weight_kg, reps, duration_min: null, distance_km: null });
-const c = (duration_min: number | null, distance_km: number | null) => ({ weight_kg: null, reps: null, duration_min, distance_km });
+const w = (weight_kg: number | null, reps: number | null) => ({ weight_kg, reps, duration_min: null, distance_km: null, load: null });
+const c = (duration_min: number | null, distance_km: number | null) => ({ weight_kg: null, reps: null, duration_min, distance_km, load: null });
 
 test("1セッションの指標: 最大重量（同重量なら回数の多い方）・総挙上量・推定MAX", () => {
   const m = sessionMetrics([w(40, 10), w(50, 8), w(60, 5), w(60, 6)]);

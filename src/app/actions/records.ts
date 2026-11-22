@@ -58,6 +58,7 @@ export async function saveSessionAction(
       reps: clean(e.reps, { integer: true, max: 9999 }),
       duration_min: clean(e.duration_min, { max: 9999 }),
       distance_km: clean(e.distance_km, { max: 999 }),
+      load: clean(e.load, { max: 999 }),
     }));
     // 数値なしでも「やった」を残すため、行が0件なら空の1行を入れる
     payload.push({ exercise_id: ex.exerciseId, entries: entries.length ? entries : [{}] });
@@ -99,7 +100,7 @@ export async function finishSessionAction(sessionId: string | null): Promise<Fin
   if (sessionId && UUID_RE.test(sessionId)) {
     const { data } = await supabase
       .from("training_sessions")
-      .select("id, session_exercises(exercise_id, exercise_entries(weight_kg, reps, duration_min, distance_km))")
+      .select("id, session_exercises(exercise_id, exercise_entries(weight_kg, reps, duration_min, distance_km, load))")
       .eq("id", sessionId)
       .eq("user_id", member.id)
       .maybeSingle();
@@ -137,6 +138,7 @@ const toEntry = (e: Partial<Entry>): Entry => ({
   reps: toNum(e.reps),
   duration_min: toNum(e.duration_min),
   distance_km: toNum(e.distance_km),
+  load: toNum(e.load),
 });
 
 /** 今回保存した記録で更新した自己ベスト（「ラットプル 最大重量 60kg×5回」の形）。過去の自分の記録とだけ比べる */
@@ -148,7 +150,7 @@ async function findPersonalBests(userId: string, savedId: string, saved: SavedEx
     supabase.from("exercises").select("id, name, type").in("id", ids),
     supabase
       .from("training_sessions")
-      .select("id, session_exercises!inner(exercise_id, exercise_entries(weight_kg, reps, duration_min, distance_km))")
+      .select("id, session_exercises!inner(exercise_id, exercise_entries(weight_kg, reps, duration_min, distance_km, load))")
       .eq("user_id", userId)
       .neq("id", savedId)
       .in("session_exercises.exercise_id", ids)
@@ -171,6 +173,7 @@ async function findPersonalBests(userId: string, savedId: string, saved: SavedEx
             reps: num(e.reps),
             duration_min: num(e.duration_min),
             distance_km: num(e.distance_km),
+            load: num(e.load),
           })),
         ),
     );

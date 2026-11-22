@@ -1117,4 +1117,20 @@ await test("出発します: 今日の予定の参加者だけが1回、ほか�
   await clearNotifs();
 });
 
+await test("有酸素の負荷: 保存して読める・負の値は入らない", async () => {
+  const [{ save_training_session: sid }] = await as("C", "select save_training_session(null, now(), $1::jsonb)", [
+    JSON.stringify([{ exercise_id: runId, entries: [{ duration_min: 20, load: 8.5 }, { duration_min: 10 }] }]),
+  ]);
+  const rows = await asSuper(
+    "select e.load from exercise_entries e join session_exercises se on se.id = e.session_exercise_id where se.session_id = $1 order by e.display_order",
+    [sid],
+  );
+  assert.deepEqual(rows.map((r) => (r.load === null ? null : Number(r.load))), [8.5, null]);
+  await rejects(
+    () => as("C", "select save_training_session(null, now(), $1::jsonb)", [JSON.stringify([{ exercise_id: runId, entries: [{ load: -1 }] }])]),
+    /check/,
+  );
+  await as("C", "delete from training_sessions where id = $1", [sid]);
+});
+
 console.log(`\n${passed} passed${process.exitCode ? ", some FAILED" : ""}`);

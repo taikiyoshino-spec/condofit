@@ -39,7 +39,7 @@ export async function getReviewSessions(userId: string, month: string): Promise<
   const { data, error } = await supabase
     .from("training_sessions")
     .select(
-      "performed_at, session_exercises(exercise_id, exercises(name, type, body_part_id, owner_user_id), exercise_entries(weight_kg, reps, duration_min, distance_km))",
+      "performed_at, session_exercises(exercise_id, exercises(name, type, body_part_id, owner_user_id), exercise_entries(weight_kg, reps, duration_min, distance_km, load))",
     )
     .eq("user_id", userId)
     .lt("performed_at", new Date(`${to}T00:00:00+09:00`).toISOString())
@@ -64,7 +64,7 @@ export async function getReviewSessions(userId: string, month: string): Promise<
       type: se.exercises?.type ?? "weight",
       bodyPartId: se.exercises?.body_part_id ?? null,
       custom: !se.exercises || se.exercises.owner_user_id !== null,
-      entries: se.exercise_entries.map((e) => ({ weight_kg: n(e.weight_kg), reps: n(e.reps), duration_min: n(e.duration_min), distance_km: n(e.distance_km) })),
+      entries: se.exercise_entries.map((e) => ({ weight_kg: n(e.weight_kg), reps: n(e.reps), duration_min: n(e.duration_min), distance_km: n(e.distance_km), load: n(e.load) })),
     })),
   }));
 }

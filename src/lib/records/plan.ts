@@ -3,7 +3,7 @@ import { parseNumber, type Entry, type ExerciseType } from "./format.ts";
 
 /** done: 記録に残す / planned: メニューの予定でまだ未実施 / skipped: やらなかった（記録に残さない） */
 export type RowStatus = "done" | "planned" | "skipped";
-type Values = { weight: string; reps: string; duration: string; distance: string };
+type Values = { weight: string; reps: string; duration: string; distance: string; load: string };
 /**
  * fromPlan の行は plan に予定の値を持つ（「元に戻す」で予定に戻すため）。
  * planRef はメニューのどの種目（item）の何セット目（set）か（完了時にメニューの重量を更新するため）
@@ -11,16 +11,16 @@ type Values = { weight: string; reps: string; duration: string; distance: string
 export type Row = Values & { status: RowStatus; fromPlan?: boolean; plan?: Values; planRef?: { item: number; set: number } };
 export type Block = { key: number; exerciseId: string; name: string; type: ExerciseType; rows: Row[] };
 
-export const EMPTY_ROW: Row = { weight: "", reps: "", duration: "", distance: "", status: "done" };
+export const EMPTY_ROW: Row = { weight: "", reps: "", duration: "", distance: "", load: "", status: "done" };
 
 const str = (n: number | null | undefined) => (n === null || n === undefined ? "" : String(n));
 export const entryToRow = (e: Partial<Entry>, status: RowStatus = "done", fromPlan = false): Row => {
-  const values = { weight: str(e.weight_kg), reps: str(e.reps), duration: str(e.duration_min), distance: str(e.distance_km) };
+  const values = { weight: str(e.weight_kg), reps: str(e.reps), duration: str(e.duration_min), distance: str(e.distance_km), load: str(e.load) };
   return { ...values, status, ...(fromPlan ? { fromPlan: true, plan: values } : {}) };
 };
 
 /** 手入力の行として複製（予定の印は外す） */
-export const asManualRow = (r: Row): Row => ({ weight: r.weight, reps: r.reps, duration: r.duration, distance: r.distance, status: "done" });
+export const asManualRow = (r: Row): Row => ({ weight: r.weight, reps: r.reps, duration: r.duration, distance: r.distance, load: r.load, status: "done" });
 
 export function rowToEntry(r: Row): Entry {
   return {
@@ -28,6 +28,7 @@ export function rowToEntry(r: Row): Entry {
     reps: parseNumber(r.reps, { integer: true }),
     duration_min: parseNumber(r.duration),
     distance_km: parseNumber(r.distance, { max: 999 }),
+    load: parseNumber(r.load ?? "", { max: 999 }), // 端末に覚えた古い行には load がない
   };
 }
 

@@ -9,8 +9,8 @@ const parts = [
   { id: "free", name: "フリーウェイト", cardio: false, freeWeight: true },
   { id: "aero", name: "有酸素", cardio: true, freeWeight: false },
 ];
-const w = (weight_kg: number, reps: number) => ({ weight_kg, reps, duration_min: null, distance_km: null });
-const c = (duration_min: number, distance_km: number | null) => ({ weight_kg: null, reps: null, duration_min, distance_km });
+const w = (weight_kg: number, reps: number) => ({ weight_kg, reps, duration_min: null, distance_km: null, load: null });
+const c = (duration_min: number, distance_km: number | null) => ({ weight_kg: null, reps: null, duration_min, distance_km, load: null });
 const bench = (...entries: ReturnType<typeof w>[]) => ({ exerciseId: "bench", exerciseName: "ベンチプレス", type: "weight" as const, bodyPartId: "chest", custom: false, entries });
 const row = (...entries: ReturnType<typeof w>[]) => ({ exerciseId: "row", exerciseName: "ローイング", type: "weight" as const, bodyPartId: "back", custom: false, entries });
 const run = (min: number, km: number | null) => ({ exerciseId: "run", exerciseName: "ランニング", type: "cardio" as const, bodyPartId: "aero", custom: false, entries: [c(min, km)] });

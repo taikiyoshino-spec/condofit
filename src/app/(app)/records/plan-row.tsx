@@ -5,7 +5,7 @@ import { formatEntry, type ExerciseType } from "@/lib/records/format";
 import { adjustCount, rowToEntry, type Row } from "@/lib/records/plan";
 import { CardioInputs, NumberInput } from "./editor-parts";
 
-type Values = Pick<Row, "weight" | "reps" | "duration" | "distance">;
+type Values = Pick<Row, "weight" | "reps" | "duration" | "distance" | "load">;
 
 /**
  * メニューの予定セット1行。
@@ -46,8 +46,8 @@ export function PlanRow({
   if (adjusting) {
     const commit = () => {
       const reps = type === "weight" ? Number(adjusting.reps || 0) : null;
-      const emptyCardio = type === "cardio" && !adjusting.duration && !adjusting.distance;
-      // 0回（有酸素は時間も距離もなし）なら、やらなかった扱い
+      const emptyCardio = type === "cardio" && !adjusting.duration && !adjusting.distance && !adjusting.load;
+      // 0回（有酸素は時間・距離・負荷のどれもなし）なら、やらなかった扱い
       if (reps === 0 || emptyCardio) onSkip();
       else onDone(adjusting);
       setAdjusting(null);
@@ -87,6 +87,7 @@ export function PlanRow({
             <CardioInputs
               duration={adjusting.duration}
               distance={adjusting.distance}
+              load={adjusting.load}
               onChange={(v) => setAdjusting({ ...adjusting, ...v })}
             />
           </div>
@@ -109,7 +110,7 @@ export function PlanRow({
       <span className="flex-1 text-sm font-medium">{planText}</span>
       <button
         type="button"
-        onClick={() => setAdjusting({ weight: row.weight, reps: row.reps, duration: row.duration, distance: row.distance })}
+        onClick={() => setAdjusting({ weight: row.weight, reps: row.reps, duration: row.duration, distance: row.distance, load: row.load })}
         className="rounded-lg border border-border px-2.5 py-1.5 text-xs"
       >
         変えて記録
