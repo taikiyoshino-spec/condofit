@@ -2,7 +2,9 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { deleteMenuAction, saveMenuAction } from "@/app/actions/menus";
+import { applyMenuSyncAction, deleteMenuAction, findMenuSyncAction, saveMenuAction, type MenuSyncCandidate } from "@/app/actions/menus";
+import { BottomSheet } from "@/components/bottom-sheet";
+import { valueChanges, type ValueChange } from "@/lib/menus/sync";
 import { showToast } from "@/components/toaster";
 import type { Entry } from "@/lib/records/format";
 import { asManualRow, EMPTY_ROW, entryToRow, rowToEntry, type Block } from "@/lib/records/plan";
@@ -38,6 +40,9 @@ export function MenuEditor({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [pending, startTransition] = useTransition();
+  // 保存したあと、ほかのメニューにも同じ重さ・負荷の変更をするかの確認
+  const [sync, setSync] = useState<{ candidates: MenuSyncCandidate[]; changes: ValueChange[]; selected: string[] } | null>(null);
+  const [syncing, setSyncing] = useState(false);
 
   const update = (key: number, fn: (b: Block) => Block | null) =>
     setBlocks((list) => list.flatMap((b) => (b.key === key ? (fn(b) ?? []) : [b])));
@@ -61,17 +66,37 @@ export function MenuEditor({
     setPickerOpen(false);
   };
 
+  const finish = () => {
+    router.push("/records/menus");
+    router.refresh();
+  };
+
   const save = () =>
     startTransition(async () => {
-      const result = await saveMenuAction(menu?.id ?? null, {
-        name,
-        items: blocks.map((b) => ({ exerciseId: b.exerciseId, sets: b.rows.map(rowToEntry) })),
-      });
+      const items = blocks.map((b) => ({ exerciseId: b.exerciseId, sets: b.rows.map(rowToEntry) }));
+      const result = await saveMenuAction(menu?.id ?? null, { name, items });
       if (!result.ok) return showToast(result.error);
       showToast("メニューを保存しました");
-      router.push("/records/menus");
-      router.refresh();
+      // 重さ・負荷を変えていて、同じ種目で同じ値のセットがあるほかのメニューがあれば、合わせて変えるか確認する
+      const changes = menu ? valueChanges(menu.items, items) : [];
+      const candidates = changes.length ? await findMenuSyncAction(menu!.id, changes).catch(() => []) : [];
+      if (candidates.length) setSync({ candidates, changes, selected: candidates.map((c) => c.menuId) });
+      else finish();
     });
+
+  const answerSync = async (apply: boolean) => {
+    if (apply && sync && sync.selected.length) {
+      setSyncing(true);
+      const r = await applyMenuSyncAction(sync.selected, sync.changes).catch(() => ({ ok: false, updated: 0 }));
+      setSyncing(false);
+      showToast(r.ok ? `ほかのメニュー${r.updated}件も変更しました` : "ほかのメニューを変更できませんでした");
+    }
+    setSync(null);
+    finish();
+  };
+
+  const toggleSync = (menuId: string, on: boolean) =>
+    setSync((cur) => cur && { ...cur, selected: on ? [...cur.selected, menuId] : cur.selected.filter((id) => id !== menuId) });
 
   const remove = () =>
     startTransition(async () => {
@@ -189,6 +214,52 @@ export function MenuEditor({
           {pending ? "保存中…" : "メニューを保存"}
         </button>
       </div>
+
+      <BottomSheet open={sync !== null} onClose={() => void answerSync(false)} title="ほかのメニューにも同じ変更をしますか？">
+        <p className="mb-3 text-sm text-muted">同じ種目で、変える前と同じ値のセットだけを変えます。</p>
+        <ul className="mb-4 space-y-2">
+          {sync?.candidates.map((c) => (
+            <li key={c.menuId}>
+              <label className="flex items-start gap-2 rounded-lg border border-border px-3 py-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={sync.selected.includes(c.menuId)}
+                  onChange={(e) => toggleSync(c.menuId, e.target.checked)}
+                  className="mt-0.5 h-5 w-5 shrink-0 accent-[var(--accent)]"
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block font-medium">{c.name}</span>
+                  {c.changes.map((ch) => (
+                    <span key={`${ch.exerciseId}-${ch.field}-${ch.from}`} className="block text-muted">
+                      {ch.exerciseName}{" "}
+                      {ch.field === "weight_kg" ? `${ch.from}kg` : `負荷${ch.from}`} →{" "}
+                      <span className="font-semibold text-accent">{ch.field === "weight_kg" ? `${ch.to}kg` : `負荷${ch.to}`}</span>（{ch.count}セット）
+                    </span>
+                  ))}
+                </span>
+              </label>
+            </li>
+          ))}
+        </ul>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={syncing}
+            onClick={() => void answerSync(false)}
+            className="flex-1 rounded-lg border border-border py-3 text-sm"
+          >
+            このメニューだけ
+          </button>
+          <button
+            type="button"
+            disabled={syncing || !sync?.selected.length}
+            onClick={() => void answerSync(true)}
+            className="flex-1 rounded-lg bg-accent py-3 text-sm font-semibold text-accent-fg disabled:opacity-50"
+          >
+            {syncing ? "変更中…" : "合わせて変更する"}
+          </button>
+        </div>
+      </BottomSheet>
 
       <ExercisePicker
         open={pickerOpen}
